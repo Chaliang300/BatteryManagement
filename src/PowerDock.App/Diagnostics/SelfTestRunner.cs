@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -35,6 +35,13 @@ namespace PowerDock.App.Diagnostics
                 Directory.CreateDirectory(dataDir);
 
             var items = new List<SelfTestItem>();
+
+            // S0-AUTO-03: clean leftovers from a previously killed self-test before doing anything.
+            int leftoverAutoStartValues = AutoStartService.CleanupLeftoverTestValues();
+            if (leftoverAutoStartValues > 0)
+            {
+                AppLogger.Warn("Self-test cleaned " + leftoverAutoStartValues + " leftover autostart test value(s).");
+            }
 
             bool is64Bit = Environment.Is64BitProcess;
             items.Add(new SelfTestItem
@@ -149,7 +156,7 @@ namespace PowerDock.App.Diagnostics
                 {
                     Id = "FS-01",
                     Category = "FileSystem",
-                    Description = "数据目录写入与原子清理测试",
+                    Description = "数据目录写入/读取/删除闭环测试（原子覆盖由 FS-02 验证）",
                     Passed = content == "ok",
                     Detail = string.Format("Data Directory: {0}", dataDir)
                 });
@@ -160,7 +167,7 @@ namespace PowerDock.App.Diagnostics
                 {
                     Id = "FS-01",
                     Category = "FileSystem",
-                    Description = "数据目录写入与原子清理测试",
+                    Description = "数据目录写入/读取/删除闭环测试（原子覆盖由 FS-02 验证）",
                     Passed = false,
                     Detail = ex.Message
                 });
@@ -374,68 +381,93 @@ namespace PowerDock.App.Diagnostics
                 });
             }
 
-            // AUTO-01: 开机自启启用写入、回读校验与关闭清理无残留测试
+            // AUTO-01: 开机自启启用写入、回读校验与关闭清理无残留测试（try/finally 保证清理）
             try
             {
-                string testValueName = "PowerDock_AutoStart_Test_" + Guid.NewGuid().ToString("N");
+                string testValueName = AutoStartService.TestValuePrefix + Guid.NewGuid().ToString("N");
                 string testExe = AutoStartService.GetDefaultExecutablePath();
                 var autoStart = new AutoStartService(testExe, testValueName);
 
-                // 1. 验证初始状态未启用
-                bool initialDisabled = !autoStart.IsAutoStartEnabled();
-
-                // 2. 启用自启，回读校验
-                bool enableSuccess = autoStart.SetAutoStart(true);
-                bool afterEnableVerified = autoStart.IsAutoStartEnabled();
-
-                // 3. 直接通过注册表检查写入的值与格式
+                bool initialDisabled = false;
+                bool enableSuccess = false;
+                bool afterEnableVerified = false;
                 bool regMatch = false;
-                using (var rk = Registry.CurrentUser.OpenSubKey(AutoStartService.RunRegistrySubKey, false))
+                bool disableSuccess = false;
+                bool afterDisableClean = false;
+                bool residueClean = false;
+                Exception bodyError = null;
+
+                try
                 {
-                    if (rk != null)
+                    // 1. 验证初始状态未启用
+                    initialDisabled = !autoStart.IsAutoStartEnabled();
+
+                    // 2. 启用自启，回读校验
+                    enableSuccess = autoStart.SetAutoStart(true);
+                    afterEnableVerified = autoStart.IsAutoStartEnabled();
+
+                    // 3. 直接通过注册表检查写入的值与格式
+                    using (var rk = Registry.CurrentUser.OpenSubKey(AutoStartService.RunRegistrySubKey, false))
                     {
-                        object regVal = rk.GetValue(testValueName, null);
-                        if (regVal != null && string.Equals(regVal.ToString(), autoStart.ExpectedCommandLine, StringComparison.OrdinalIgnoreCase))
+                        if (rk != null)
                         {
-                            regMatch = true;
+                            object regVal = rk.GetValue(testValueName, null);
+                            if (regVal != null && string.Equals(regVal.ToString(), autoStart.ExpectedCommandLine, StringComparison.OrdinalIgnoreCase))
+                            {
+                                regMatch = true;
+                            }
                         }
                     }
                 }
-
-                // 4. 关闭自启，清理并校验无残留
-                bool disableSuccess = autoStart.SetAutoStart(false);
-                bool afterDisableClean = !autoStart.IsAutoStartEnabled();
-
-                // 5. 直接通过注册表检查确认值已删除
-                bool residueClean = false;
-                using (var rk = Registry.CurrentUser.OpenSubKey(AutoStartService.RunRegistrySubKey, false))
+                catch (Exception ex)
                 {
-                    if (rk != null)
+                    bodyError = ex;
+                }
+                finally
+                {
+                    // 4. 关闭自启，清理并校验无残留：无论上面的读取/校验是否抛异常都必须执行
+                    try
                     {
-                        object regVal = rk.GetValue(testValueName, null);
-                        residueClean = (regVal == null);
+                        disableSuccess = autoStart.SetAutoStart(false);
+                        afterDisableClean = !autoStart.IsAutoStartEnabled();
+                        using (var rk = Registry.CurrentUser.OpenSubKey(AutoStartService.RunRegistrySubKey, false))
+                        {
+                            if (rk != null)
+                            {
+                                residueClean = rk.GetValue(testValueName, null) == null;
+                            }
+                            else
+                            {
+                                residueClean = true;
+                            }
+                        }
+                    }
+                    catch (Exception cleanupEx)
+                    {
+                        AppLogger.Error("AUTO-01 cleanup (disable autostart test value) failed", cleanupEx);
                     }
                 }
 
-                // 6. 验证默认 AutoStartService 属性
+                // 5. 验证默认 AutoStartService 属性
                 var defaultSvc = new AutoStartService();
                 bool defaultValid = !string.IsNullOrEmpty(defaultSvc.ValueName) &&
                                     !string.IsNullOrEmpty(defaultSvc.ExePath) &&
                                     defaultSvc.ExpectedCommandLine.EndsWith("--autostart");
 
                 bool autoPassed = initialDisabled && enableSuccess && afterEnableVerified && regMatch &&
-                                  disableSuccess && afterDisableClean && residueClean && defaultValid;
+                                  disableSuccess && afterDisableClean && residueClean && defaultValid &&
+                                  bodyError == null;
 
                 items.Add(new SelfTestItem
                 {
                     Id = "AUTO-01",
                     Category = "Shell",
-                    Description = "开机自启启用写入、回读校验与关闭清理无残留测试",
+                    Description = "开机自启启用写入、回读校验与关闭清理无残留测试（try/finally）",
                     Passed = autoPassed,
                     Detail = autoPassed
-                        ? string.Format("写入/回读校验/关闭清理完全闭环，Command={0}", autoStart.ExpectedCommandLine)
-                        : string.Format("InitDis={0}, Enable={1}, AfterEn={2}, RegMatch={3}, Dis={4}, Clean={5}, ResidueClean={6}",
-                                        initialDisabled, enableSuccess, afterEnableVerified, regMatch, disableSuccess, afterDisableClean, residueClean)
+                        ? string.Format("写入/回读校验/关闭清理完全闭环（try/finally 保证清理），Command={0}，启动清理遗留值={1}", autoStart.ExpectedCommandLine, leftoverAutoStartValues)
+                        : string.Format("InitDis={0}, Enable={1}, AfterEn={2}, RegMatch={3}, Dis={4}, Clean={5}, ResidueClean={6}, BodyError={7}",
+                                        initialDisabled, enableSuccess, afterEnableVerified, regMatch, disableSuccess, afterDisableClean, residueClean, bodyError == null ? "none" : bodyError.Message)
                 });
             }
             catch (Exception ex)
@@ -450,63 +482,129 @@ namespace PowerDock.App.Diagnostics
                 });
             }
 
-            // TRAY-01: 三格电池托盘图标在 16/20/24/32px 四档分辨率下的渲染与句柄释放验证
+            // TRAY-01: 三格托盘图标像素级断言（直调 RenderBitmap，不做抓屏；AGENTS.md §6.8 几何）
             try
             {
-                int[] sizes = new int[] { 16, 20, 24, 32 };
+                int[] sizes = new int[] { 16, 20, 24, 28, 32 };
                 bool allSizesPassed = true;
                 int totalRendered = 0;
                 int totalFreed = 0;
+                StringBuilder failures = new StringBuilder();
 
                 foreach (int sz in sizes)
                 {
-                    // 1. 正常状态 (80%)
+                    TrayIconGeometry geo = BatteryTrayIconRenderer.GetGeometry(sz);
+                    int row = (int)Math.Floor(geo.BarY + geo.BarH / 2f);
+                    if (row >= sz) row = sz / 2;
+                    int xStart = (int)Math.Ceiling(geo.InnerLeft);
+                    int xEnd = (int)Math.Floor(geo.InnerRight) - 1;
+
                     using (Bitmap bmpNormal = BatteryTrayIconRenderer.RenderBitmap(sz, 80, false, false, true))
-                    {
-                        if (bmpNormal == null || bmpNormal.Width != sz || bmpNormal.Height != sz) allSizesPassed = false;
-                        totalRendered++;
-                    }
-
-                    // 2. 充电状态 (50%, 绿)
                     using (Bitmap bmpCharging = BatteryTrayIconRenderer.RenderBitmap(sz, 50, true, false, true))
-                    {
-                        if (bmpCharging == null || bmpCharging.Width != sz || bmpCharging.Height != sz) allSizesPassed = false;
-                        totalRendered++;
-                    }
-
-                    // 3. 低电量状态 (15%, 橙)
                     using (Bitmap bmpLow = BatteryTrayIconRenderer.RenderBitmap(sz, 15, false, false, true))
-                    {
-                        if (bmpLow == null || bmpLow.Width != sz || bmpLow.Height != sz) allSizesPassed = false;
-                        totalRendered++;
-                    }
-
-                    // 4. 离线状态 (灰)
                     using (Bitmap bmpOffline = BatteryTrayIconRenderer.RenderBitmap(sz, null, false, true, true))
                     {
-                        if (bmpOffline == null || bmpOffline.Width != sz || bmpOffline.Height != sz) allSizesPassed = false;
-                        totalRendered++;
+                        totalRendered += 4;
+                        if (bmpNormal.Width != sz || bmpNormal.Height != sz || bmpCharging.Width != sz ||
+                            bmpLow.Width != sz || bmpOffline.Width != sz)
+                        {
+                            allSizesPassed = false;
+                            failures.Append(sz + ":size;");
+                        }
+
+                        // 1) 中间行 80%：三格全亮，且相邻格之间至少 1 列 alpha<64（16px 不许融成一条）
+                        List<int[]> runs = new List<int[]>();
+                        bool inRun = false;
+                        int runStart = 0;
+                        for (int x = xStart; x <= xEnd; x++)
+                        {
+                            bool lit = bmpNormal.GetPixel(x, row).A >= 64;
+                            if (lit && !inRun) { inRun = true; runStart = x; }
+                            if (!lit && inRun) { inRun = false; runs.Add(new int[] { runStart, x - 1 }); }
+                        }
+                        if (inRun) runs.Add(new int[] { runStart, xEnd });
+                        if (runs.Count != 3)
+                        {
+                            allSizesPassed = false;
+                            failures.Append(sz + ":runs=" + runs.Count + ";");
+                        }
+                        else
+                        {
+                            for (int i = 1; i < runs.Count; i++)
+                            {
+                                int minGapAlpha = 255;
+                                for (int x = runs[i - 1][1] + 1; x < runs[i][0]; x++)
+                                {
+                                    int a = bmpNormal.GetPixel(x, row).A;
+                                    if (a < minGapAlpha) minGapAlpha = a;
+                                }
+                                if (minGapAlpha >= 64)
+                                {
+                                    allSizesPassed = false;
+                                    failures.Append(sz + ":gap" + i + "a=" + minGapAlpha + ";");
+                                }
+                            }
+                        }
+
+                        // 2) 右侧空档列（最右列）必须 alpha=0
+                        if (bmpNormal.GetPixel(sz - 1, row).A != 0)
+                        {
+                            allSizesPassed = false;
+                            failures.Append(sz + ":rightMargin;");
+                        }
+
+                        // 3) 语义色 / 点亮格数 / 未点亮格 alpha≈0.14
+                        int[] cellCenters = new int[3];
+                        cellCenters[0] = Math.Min(sz - 1, (int)Math.Floor(geo.BarX0 + geo.BarW / 2f));
+                        cellCenters[1] = Math.Min(sz - 1, (int)Math.Floor(geo.BarX1 + geo.BarW / 2f));
+                        cellCenters[2] = Math.Min(sz - 1, (int)Math.Floor(geo.BarX2 + geo.BarW / 2f));
+
+                        Color normalCell = bmpNormal.GetPixel(cellCenters[0], row);
+                        Color lowCell = bmpLow.GetPixel(cellCenters[0], row);
+                        Color chargeCell = bmpCharging.GetPixel(cellCenters[0], row);
+                        Color offlineCell = bmpOffline.GetPixel(cellCenters[0], row);
+                        Color unlitLow = bmpLow.GetPixel(cellCenters[1], row);
+                        Color unlitCharge = bmpCharging.GetPixel(cellCenters[2], row);
+
+                        if (!(normalCell.A >= 200 && normalCell.R >= 250 && normalCell.G >= 250 && normalCell.B >= 250))
+                        { allSizesPassed = false; failures.Append(sz + ":normal;"); }
+                        if (!(lowCell.A >= 200 && Math.Abs(lowCell.R - 0xFF) <= 2 && Math.Abs(lowCell.G - 0x9F) <= 2 && Math.Abs(lowCell.B - 0x0A) <= 2))
+                        { allSizesPassed = false; failures.Append(sz + ":low;"); }
+                        if (!(chargeCell.A >= 200 && Math.Abs(chargeCell.R - 0x34) <= 2 && Math.Abs(chargeCell.G - 0xD3) <= 2 && Math.Abs(chargeCell.B - 0x99) <= 2))
+                        { allSizesPassed = false; failures.Append(sz + ":charge;"); }
+                        // offline = 全部未点亮；15% 只点亮第 1 格，50% 充电点亮前 2 格
+                        if (!(offlineCell.A >= 30 && offlineCell.A <= 40)) { allSizesPassed = false; failures.Append(sz + ":offline=" + offlineCell.A + ";"); }
+                        if (!(unlitLow.A >= 30 && unlitLow.A <= 40)) { allSizesPassed = false; failures.Append(sz + ":unlitLow=" + unlitLow.A + ";"); }
+                        if (!(unlitCharge.A >= 30 && unlitCharge.A <= 40)) { allSizesPassed = false; failures.Append(sz + ":unlitCharge=" + unlitCharge.A + ";"); }
                     }
 
-                    // 5. 浅色任务栏反色 (墨色)
+                    // 4) 浅色任务栏反色：墨色而非白
                     using (Bitmap bmpLight = BatteryTrayIconRenderer.RenderBitmap(sz, 80, false, false, false))
                     {
-                        if (bmpLight == null || bmpLight.Width != sz || bmpLight.Height != sz) allSizesPassed = false;
                         totalRendered++;
+                        int cx = Math.Min(sz - 1, (int)Math.Floor(geo.BarX0 + geo.BarW / 2f));
+                        int cy = Math.Min(sz - 1, (int)Math.Floor(geo.BarY + geo.BarH / 2f));
+                        Color lightCell = bmpLight.GetPixel(cx, cy);
+                        if (!(lightCell.A >= 200 && lightCell.R < 120 && lightCell.G < 120 && lightCell.B < 120))
+                        {
+                            allSizesPassed = false;
+                            failures.Append(sz + ":light;");
+                        }
                     }
 
-                    // 6. GDI 句柄获取与释放闭环验证
+                    // 5) GDI 句柄获取与释放闭环
                     IntPtr hIcon;
                     using (Icon icon = BatteryTrayIconRenderer.RenderIcon(sz, 75, false, false, true, out hIcon))
                     {
                         if (icon == null || hIcon == IntPtr.Zero || icon.Width != sz || icon.Height != sz)
                         {
                             allSizesPassed = false;
+                            failures.Append(sz + ":icon;");
                         }
-                        bool destroyed = NativeMethods.DestroyIcon(hIcon);
-                        if (!destroyed)
+                        if (!NativeMethods.DestroyIcon(hIcon))
                         {
                             allSizesPassed = false;
+                            failures.Append(sz + ":destroy;");
                         }
                         else
                         {
@@ -521,28 +619,22 @@ namespace PowerDock.App.Diagnostics
                     IntPtr h;
                     using (Icon ic = BatteryTrayIconRenderer.RenderIcon(24, 90, false, false, true, out h))
                     {
-                        if (NativeMethods.DestroyIcon(h))
-                        {
-                            totalFreed++;
-                        }
-                        else
-                        {
-                            allSizesPassed = false;
-                        }
+                        if (NativeMethods.DestroyIcon(h)) totalFreed++;
                     }
                 }
 
-                bool tray01Passed = allSizesPassed && totalRendered == 20 && totalFreed == 14;
+                bool tray01Passed = allSizesPassed && totalRendered == 25 && totalFreed == 15;
 
                 items.Add(new SelfTestItem
                 {
                     Id = "TRAY-01",
                     Category = "Shell",
-                    Description = "三格电池托盘图标在 16/20/24/32px 四档分辨率下的渲染与句柄释放验证",
+                    Description = "三格托盘图标像素断言（16/20/24/28/32px：像素间隙/右空档/语义色/未点亮 alpha/句柄释放）",
                     Passed = tray01Passed,
                     Detail = tray01Passed
-                        ? string.Format("16/20/24/32px 四档五状态渲染完成 ({0} 幅)，句柄分配与 DestroyIcon 释放闭环 ({1} 次)", totalRendered, totalFreed)
-                        : string.Format("SizesPassed={0}, TotalRendered={1}, TotalFreed={2}", allSizesPassed, totalRendered, totalFreed)
+                        ? string.Format("5 档 × 5 状态渲染 ({0} 幅) 像素断言全部通过；句柄释放闭环 ({1} 次)", totalRendered, totalFreed)
+                        : string.Format("SizesPassed={0}, TotalRendered={1}, TotalFreed={2}, Failures={3}",
+                                        allSizesPassed, totalRendered, totalFreed, failures.ToString())
                 });
             }
             catch (Exception ex)
@@ -551,12 +643,11 @@ namespace PowerDock.App.Diagnostics
                 {
                     Id = "TRAY-01",
                     Category = "Shell",
-                    Description = "三格电池托盘图标在 16/20/24/32px 四档分辨率下的渲染与句柄释放验证",
+                    Description = "三格托盘图标像素断言（16/20/24/28/32px：像素间隙/右空档/语义色/未点亮 alpha/句柄释放）",
                     Passed = false,
                     Detail = ex.Message
                 });
             }
-
             // TRAY-02: 托盘可用性与失败降级逻辑测试
             try
             {
