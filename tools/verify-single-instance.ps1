@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 <#
 .SYNOPSIS
     Acceptance gate for PowerDock single-instance behaviour (PR-S0-03 main deliverable).
@@ -1021,9 +1021,9 @@ try {
             # After the connect window was widened to ProtocolTimeoutMs + 1000, the secondary usually
             # RECOVERS once the server drops the silent client (~2500ms) and then gets 22 (denied in a
             # locked session) / 0 (interactive). 21 remains the correct answer when it still cannot
-            # connect. Both are acceptable; 20 is the bug.
+            # connect. All three are acceptable; 20 is the bug. (Lead ruling: C7 allows {0,21,22}.)
             Add-Check -Case $case -Name 'NOT NoPrimary(20): a busy primary must not be reported as "no primary"' -Pass ($actualExit7 -ne $script:ExitCodes.NoPrimary) -Detail ('exit=' + $actualExit7)
-            Add-Check -Case $case -Name 'exit in {21 PrimaryNotReady, 22 ForegroundDenied}' -Pass (@($script:ExitCodes.PrimaryNotReady, $script:ExitCodes.ForegroundDenied) -contains $actualExit7) -Detail ('exit=' + $actualExit7)
+            Add-Check -Case $case -Name 'exit in {0 Success(recovered), 21 PrimaryNotReady, 22 ForegroundDenied}' -Pass (@($script:ExitCodes.Success, $script:ExitCodes.PrimaryNotReady, $script:ExitCodes.ForegroundDenied) -contains $actualExit7) -Detail ('exit=' + $actualExit7)
             Add-Check -Case $case -Name 'primary still running after the busy rejection' -Pass (@(Get-PowerDockProcesses).Count -ge 1) -Detail ('processes=' + @(Get-PowerDockProcesses).Count)
             $slice7 = Get-LogSlice -startIndex $logStart
             Save-Artifact -CaseDir $caseDir -name 'log-slice.txt' -content ($slice7 -join "`r`n") | Out-Null
@@ -1085,6 +1085,7 @@ finally {
         catch { }
     }
 }
+
 
 
 
