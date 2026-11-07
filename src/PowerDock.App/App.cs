@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using PowerDock.App.Shell;
 using PowerDock.App.Windows;
@@ -10,6 +10,10 @@ namespace PowerDock.App
     {
         private TrayIconService _trayIconService;
         private MainWindow _mainWindow;
+
+        /// <summary>Diagnostic-only switches used by --diagnose-tray-failure (S0-TRAY-03 branch).</summary>
+        public static bool TrayFailureInjection;
+        public static int AutoCloseMainWindowMs;
 
         public TrayIconService TrayIconService
         {
@@ -29,7 +33,7 @@ namespace PowerDock.App
             try
             {
                 // 1. 初始化托盘服务
-                _trayIconService = new TrayIconService();
+                _trayIconService = new TrayIconService(false, TrayFailureInjection);
                 _trayIconService.Initialize();
 
                 // 2. 初始化主窗口 (880x600, 圆角 8, DWM Acrylic)
@@ -69,6 +73,24 @@ namespace PowerDock.App
                 {
                     AppLogger.Info("Started in --autostart mode. Main window remains hidden.");
                 }
+
+                if (AutoCloseMainWindowMs > 0)
+                {
+                    AppLogger.Info("Diagnostic mode: auto-closing the main window after " + AutoCloseMainWindowMs + "ms (tray failure injection=" + TrayFailureInjection + ").");
+                    if (!_mainWindow.IsVisible)
+                    {
+                        _mainWindow.Show();
+                    }
+                    var timer = new System.Windows.Threading.DispatcherTimer();
+                    timer.Interval = TimeSpan.FromMilliseconds(AutoCloseMainWindowMs);
+                    timer.Tick += delegate
+                    {
+                        timer.Stop();
+                        AppLogger.Info("Diagnostic mode: closing the main window now.");
+                        _mainWindow.Close();
+                    };
+                    timer.Start();
+                }
             }
             catch (Exception ex)
             {
@@ -96,3 +118,4 @@ namespace PowerDock.App
         }
     }
 }
+

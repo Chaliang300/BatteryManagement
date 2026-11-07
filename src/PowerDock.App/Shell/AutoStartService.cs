@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using Microsoft.Win32;
@@ -10,6 +10,48 @@ namespace PowerDock.App.Shell
     {
         public const string DefaultValueName = "PowerDock";
         public const string RunRegistrySubKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+        public const string TestValuePrefix = "PowerDock_AutoStart_Test_";
+
+        /// <summary>
+        /// Removes leftover self-test values (PowerDock_AutoStart_Test_*) from HKCU\...\Run.
+        /// Called at process startup and by the self-test, so a killed self-test cannot leave a
+        /// permanent autostart entry behind (S0-AUTO-03).
+        /// </summary>
+        public static int CleanupLeftoverTestValues()
+        {
+            int removed = 0;
+            try
+            {
+                using (RegistryKey runKey = Registry.CurrentUser.OpenSubKey(RunRegistrySubKey, true))
+                {
+                    if (runKey == null) return 0;
+                    string[] names = runKey.GetValueNames();
+                    foreach (string name in names)
+                    {
+                        if (string.IsNullOrEmpty(name)) continue;
+                        if (!name.StartsWith(TestValuePrefix, StringComparison.OrdinalIgnoreCase)) continue;
+                        try
+                        {
+                            runKey.DeleteValue(name, false);
+                            removed++;
+                        }
+                        catch (Exception ex)
+                        {
+                            AppLogger.Warn("Failed to delete leftover autostart test value " + name + ": " + ex.Message);
+                        }
+                    }
+                }
+                if (removed > 0)
+                {
+                    AppLogger.Warn("Cleaned " + removed + " leftover autostart test value(s) from HKCU Run.");
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warn("Autostart leftover cleanup failed: " + ex.Message);
+            }
+            return removed;
+        }
 
         private readonly string _exePath;
         private readonly string _valueName;
@@ -184,3 +226,4 @@ namespace PowerDock.App.Shell
         }
     }
 }
+

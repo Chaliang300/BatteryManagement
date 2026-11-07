@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
@@ -244,7 +244,13 @@ namespace PowerDock.App.Windows
             }
             else
             {
-                AppLogger.Info("MainWindow closing directly.");
+                // Tray unavailable: never hide into an invisible process (AGENTS.md §7.6).
+                AppLogger.Warn("Tray unavailable. MainWindow closing directly shuts down the application.");
+                var app = Application.Current;
+                if (app != null)
+                {
+                    app.Shutdown();
+                }
             }
         }
 
@@ -277,3 +283,4 @@ namespace PowerDock.App.Windows
         }
     }
 }
+

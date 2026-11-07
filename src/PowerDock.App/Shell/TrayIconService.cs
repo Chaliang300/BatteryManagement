@@ -1,7 +1,10 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Threading;
 using System.Windows;
 using Forms = System.Windows.Forms;
 using Microsoft.Win32;
@@ -10,6 +13,24 @@ using PowerDock.Core.Diagnostics;
 
 namespace PowerDock.App.Shell
 {
+    /// <summary>
+    /// Per-size drawing geometry for the three-cell tray icon. The 16px variant is explicit on
+    /// purpose: a naive 24/16 scale leaves a sub-pixel cell gap (0.47px) that anti-aliases into one
+    /// continuous bright block. AGENTS.md §6.8 carries the same table.
+    /// </summary>
+    public struct TrayIconGeometry
+    {
+        public int Size;
+        public float ShellX, ShellY, ShellW, ShellH, ShellRadius, Stroke;
+        public float CapX, CapY, CapW, CapH, CapRadius;
+        public float BarX0, BarX1, BarX2, BarY, BarW, BarH, BarRadius;
+        public float InnerLeft, InnerRight;
+        public float Gap
+        {
+            get { return BarX1 - BarX0 - BarW; }
+        }
+    }
+
     public static class BatteryTrayIconRenderer
     {
         public static readonly Color ColorNormalDark = Color.White;
@@ -20,6 +41,8 @@ namespace PowerDock.App.Shell
         public static readonly Color ColorLowLight = ColorTranslator.FromHtml("#C25E00");
         public static readonly Color ColorOfflineDark = ColorTranslator.FromHtml("#8A8F99");
         public static readonly Color ColorOfflineLight = ColorTranslator.FromHtml("#7C838F");
+
+        public const float UnlitFillOpacity = 0.14f;
 
         public static bool DetectIsDarkTaskbar()
         {
@@ -70,6 +93,55 @@ namespace PowerDock.App.Shell
             return 0;
         }
 
+        /// <summary>Explicit per-size geometry (AGENTS.md §6.8). Do not replace with a single scale.</summary>
+        public static TrayIconGeometry GetGeometry(int size)
+        {
+            if (size <= 0) size = 24;
+            float s = size / 24f;
+            TrayIconGeometry g = new TrayIconGeometry();
+            g.Size = size;
+            g.Stroke = 1.6f * s;
+            g.ShellX = 2.5f * s;
+            g.ShellY = 6.5f * s;
+            g.ShellW = 17f * s;
+            g.ShellH = 11f * s;
+            g.ShellRadius = 2.2f * s;
+            g.CapX = 19.5f * s;
+            g.CapY = 9.75f * s;
+            g.CapW = 1.5f * s;
+            g.CapH = 4.5f * s;
+            g.CapRadius = 0.8f * s;
+            g.InnerLeft = g.ShellX + g.Stroke;
+            g.InnerRight = g.ShellX + g.ShellW - g.Stroke;
+            g.BarY = 8.9f * s;
+            g.BarH = 6.2f * s;
+            g.BarRadius = Math.Max(0.5f, 1.1f * s);
+
+            float cellW;
+            float gap;
+            switch (size)
+            {
+                case 16:
+                    cellW = 2.10f; gap = 1.45f; break;
+                case 20:
+                    cellW = 2.80f; gap = 1.40f; break;
+                case 24:
+                    cellW = 3.60f; gap = 1.50f; break;
+                case 28:
+                    cellW = 4.20f; gap = 1.75f; break;
+                case 32:
+                    cellW = 4.80f; gap = 2.00f; break;
+                default:
+                    cellW = 3.60f * s; gap = 1.50f * s; break;
+            }
+
+            g.BarW = cellW;
+            g.BarX0 = g.InnerLeft;
+            g.BarX1 = g.BarX0 + cellW + gap;
+            g.BarX2 = g.BarX1 + cellW + gap;
+            return g;
+        }
+
         public static GraphicsPath CreateRoundedRectangle(RectangleF rect, float radius)
         {
             GraphicsPath path = new GraphicsPath();
@@ -107,6 +179,7 @@ namespace PowerDock.App.Shell
         public static Bitmap RenderBitmap(int size, int? percent, bool isCharging, bool isOffline, bool isDarkTaskbar)
         {
             if (size <= 0) size = 24;
+            TrayIconGeometry geo = GetGeometry(size);
 
             Bitmap bmp = new Bitmap(size, size, PixelFormat.Format32bppArgb);
             using (Graphics g = Graphics.FromImage(bmp))
@@ -117,50 +190,43 @@ namespace PowerDock.App.Shell
                 g.CompositingQuality = CompositingQuality.HighQuality;
                 g.InterpolationMode = InterpolationMode.HighQualityBicubic;
 
-                float scale = (float)size / 24.0f;
-                g.ScaleTransform(scale, scale);
-
                 Color mainColor = GetSemanticColor(percent, isCharging, isOffline, isDarkTaskbar);
                 int litBars = CalculateLitBars(percent, isCharging, isOffline);
 
-                // 24px 规格基线 (AGENTS.md §6.8):
-                // 电池外壳 17x11 描边 1.6，外壳矩形 (2.5, 6.5, 17, 11)
-                float stroke = 1.6f;
-                RectangleF shellPathRect = new RectangleF(2.5f + stroke / 2f, 6.5f + stroke / 2f, 17f - stroke, 11f - stroke);
-                using (GraphicsPath shellPath = CreateRoundedRectangle(shellPathRect, 2.2f))
-                using (Pen shellPen = new Pen(mainColor, stroke))
+                // Battery shell (17x11, stroke 1.6 at 24px).
+                RectangleF shellPathRect = new RectangleF(
+                    geo.ShellX + geo.Stroke / 2f,
+                    geo.ShellY + geo.Stroke / 2f,
+                    geo.ShellW - geo.Stroke,
+                    geo.ShellH - geo.Stroke);
+                using (GraphicsPath shellPath = CreateRoundedRectangle(shellPathRect, geo.ShellRadius))
+                using (Pen shellPen = new Pen(mainColor, geo.Stroke))
                 {
                     g.DrawPath(shellPen, shellPath);
                 }
 
-                // 电池正极触点端子 (Cap):
-                // 贴附在外壳右侧 (X=19.5, Y=9.75, W=1.5, H=4.5)
-                RectangleF capRect = new RectangleF(19.5f, 9.75f, 1.5f, 4.5f);
-                using (GraphicsPath capPath = CreateRoundedRectangle(capRect, 0.8f))
+                // Positive terminal cap.
+                RectangleF capRect = new RectangleF(geo.CapX, geo.CapY, geo.CapW, geo.CapH);
+                using (GraphicsPath capPath = CreateRoundedRectangle(capRect, geo.CapRadius))
                 using (Brush capBrush = new SolidBrush(mainColor))
                 {
                     g.FillPath(capBrush, capPath);
                 }
 
-                // 三格电量矩形:
-                // 3.6x6.2, r1.1, 未点亮格 fill-opacity .14
-                float[] barX = new float[] { 4.9f, 9.2f, 13.5f };
-                float barY = 8.9f;
-                float barW = 3.6f;
-                float barH = 6.2f;
-
-                Color unlitColor = Color.FromArgb((int)(255 * 0.14f), mainColor);
+                // Three cells with explicit per-size gaps; unlit cells at 0.14 opacity.
+                float[] barX = new float[] { geo.BarX0, geo.BarX1, geo.BarX2 };
+                Color unlitColor = Color.FromArgb((int)(255 * UnlitFillOpacity), mainColor);
 
                 using (Brush litBrush = new SolidBrush(mainColor))
                 using (Brush unlitBrush = new SolidBrush(unlitColor))
                 {
                     for (int i = 0; i < 3; i++)
                     {
-                        RectangleF barRect = new RectangleF(barX[i], barY, barW, barH);
-                        using (GraphicsPath barPath = CreateRoundedRectangle(barRect, 1.1f))
+                        RectangleF barRect = new RectangleF(barX[i], geo.BarY, geo.BarW, geo.BarH);
+                        using (GraphicsPath barPath = CreateRoundedRectangle(barRect, geo.BarRadius))
                         {
-                            Brush b = (i < litBars) ? litBrush : unlitBrush;
-                            g.FillPath(b, barPath);
+                            Brush brush = (i < litBars) ? litBrush : unlitBrush;
+                            g.FillPath(brush, barPath);
                         }
                     }
                 }
@@ -189,16 +255,26 @@ namespace PowerDock.App.Shell
         private Forms.NotifyIcon _notifyIcon;
         private IntPtr _currentHicon;
         private Icon _currentIcon;
-        private bool _isTrayAvailable;
+        private volatile bool _isTrayAvailable;
         private bool _disposed;
         private bool _isDarkTaskbar;
         private int _iconSize;
         private readonly bool _forceFailureForTest;
+        private readonly bool _failureForDiagnostics;
+        private bool _registered;
+        private string _lastRegistrationDetail;
+        private int _registrationUid = -1;
+        private string _registrationWindowClass;
+        private Rectangle _registrationRect;
 
         private Action _onShowMainWindow;
         private Action _onRefreshDevices;
         private Action _onExit;
 
+        /// <summary>
+        /// True only when Shell_NotifyIcon really registered the icon (verified with
+        /// Shell_NotifyIconGetRect, not inferred from Visible=true).
+        /// </summary>
         public bool IsTrayAvailable
         {
             get { return _isTrayAvailable; }
@@ -226,6 +302,32 @@ namespace PowerDock.App.Shell
             get { return _notifyIcon; }
         }
 
+        /// <summary>Human-readable registration outcome (last Initialize call).</summary>
+        public string LastRegistrationDetail
+        {
+            get { return _lastRegistrationDetail; }
+        }
+
+        public bool IsRegistered
+        {
+            get { return _registered; }
+        }
+
+        public int RegistrationUid
+        {
+            get { return _registrationUid; }
+        }
+
+        public string RegistrationWindowClass
+        {
+            get { return _registrationWindowClass; }
+        }
+
+        public Rectangle RegistrationRect
+        {
+            get { return _registrationRect; }
+        }
+
         public Action OnShowMainWindow
         {
             get { return _onShowMainWindow; }
@@ -250,7 +352,14 @@ namespace PowerDock.App.Shell
         }
 
         public TrayIconService(bool forceFailureForTest)
-            : this(null, null, null, forceFailureForTest)
+            : this(null, null, null, forceFailureForTest, false)
+        {
+        }
+
+        /// <summary>Diagnostic-only: simulate a tray registration failure to exercise the
+        /// "tray unavailable => close exits the process" branch (S0-TRAY-03). Not used by product flow.</summary>
+        public TrayIconService(bool forceFailureForTest, bool failureForDiagnostics)
+            : this(null, null, null, forceFailureForTest, failureForDiagnostics)
         {
         }
 
@@ -260,12 +369,18 @@ namespace PowerDock.App.Shell
         }
 
         public TrayIconService(Action onShowMainWindow, Action onRefreshDevices, Action onExit, bool forceFailureForTest)
+            : this(onShowMainWindow, onRefreshDevices, onExit, forceFailureForTest, false)
+        {
+        }
+
+        private TrayIconService(Action onShowMainWindow, Action onRefreshDevices, Action onExit, bool forceFailureForTest, bool failureForDiagnostics)
         {
             _currentHicon = IntPtr.Zero;
             _onShowMainWindow = onShowMainWindow;
             _onRefreshDevices = onRefreshDevices;
             _onExit = onExit;
             _forceFailureForTest = forceFailureForTest;
+            _failureForDiagnostics = failureForDiagnostics;
             _iconSize = GetDefaultTraySize();
             _isDarkTaskbar = BatteryTrayIconRenderer.DetectIsDarkTaskbar();
         }
@@ -291,70 +406,64 @@ namespace PowerDock.App.Shell
             if (_forceFailureForTest)
             {
                 _isTrayAvailable = false;
+                _registered = false;
+                _lastRegistrationDetail = "forced failure for test";
                 AppLogger.Warn("TrayIconService: 托盘初始化失败 (测试模拟降级)，标明 IsTrayAvailable = false");
+                return false;
+            }
+
+            if (_failureForDiagnostics)
+            {
+                _isTrayAvailable = false;
+                _registered = false;
+                _lastRegistrationDetail = "diagnostic injection: simulated tray registration failure (S0-TRAY-03 branch)";
+                AppLogger.Warn("TrayIconService: 诊断注入托盘注册失败（用于验证关窗即退出分支），IsTrayAvailable=false");
                 return false;
             }
 
             try
             {
                 _notifyIcon = new Forms.NotifyIcon();
-
-                // 右键菜单: "显示 PowerDock", "刷新设备", "-", "退出 PowerDock"
-                Forms.ContextMenuStrip menu = new Forms.ContextMenuStrip();
-
-                Forms.ToolStripMenuItem itemShow = new Forms.ToolStripMenuItem("显示 PowerDock");
-                itemShow.Click += delegate(object sender, EventArgs e)
-                {
-                    TriggerShowMainWindow();
-                };
-
-                Forms.ToolStripMenuItem itemRefresh = new Forms.ToolStripMenuItem("刷新设备");
-                itemRefresh.Click += delegate(object sender, EventArgs e)
-                {
-                    TriggerRefreshDevices();
-                };
-
-                Forms.ToolStripSeparator itemSep = new Forms.ToolStripSeparator();
-
-                Forms.ToolStripMenuItem itemExit = new Forms.ToolStripMenuItem("退出 PowerDock");
-                itemExit.Click += delegate(object sender, EventArgs e)
-                {
-                    TriggerExit();
-                };
-
-                menu.Items.Add(itemShow);
-                menu.Items.Add(itemRefresh);
-                menu.Items.Add(itemSep);
-                menu.Items.Add(itemExit);
-
-                _notifyIcon.ContextMenuStrip = menu;
+                BuildContextMenu();
                 _notifyIcon.Text = "PowerDock";
 
-                // 左键点击: 唤醒并置前主窗口委托
-                _notifyIcon.MouseClick += delegate(object sender, Forms.MouseEventArgs e)
-                {
-                    if (e.Button == Forms.MouseButtons.Left)
-                    {
-                        TriggerShowMainWindow();
-                    }
-                };
-
-                _notifyIcon.DoubleClick += delegate(object sender, EventArgs e)
-                {
-                    TriggerShowMainWindow();
-                };
-
-                // 初始图标渲染
+                // Root-cause fix: the icon must be assigned BEFORE Visible=true. The previous
+                // implementation called UpdateState while _isTrayAvailable was still false, the
+                // guard returned early, Icon stayed null and NIM_ADD silently failed.
                 UpdateState(100, false, false, "PowerDock");
+                if (_notifyIcon.Icon == null)
+                {
+                    _isTrayAvailable = false;
+                    _registered = false;
+                    _lastRegistrationDetail = "icon bitmap was not assigned before Visible=true";
+                    AppLogger.Warn("TrayIconService: 初始化失败：" + _lastRegistrationDetail);
+                    return false;
+                }
 
                 _notifyIcon.Visible = true;
+
+                string detail;
+                if (!VerifyRegistration(1500, out detail))
+                {
+                    _isTrayAvailable = false;
+                    _registered = false;
+                    _lastRegistrationDetail = detail;
+                    AppLogger.Warn("TrayIconService: 托盘注册失败，IsTrayAvailable=false；原因：" + detail);
+                    try { _notifyIcon.Visible = false; } catch { }
+                    return false;
+                }
+
+                _registered = true;
                 _isTrayAvailable = true;
-                AppLogger.Info("TrayIconService: 系统托盘服务初始化成功，IsTrayAvailable = true");
+                _lastRegistrationDetail = detail;
+                AppLogger.Info("TrayIconService: 托盘图标注册成功，IsTrayAvailable=true；" + detail);
                 return true;
             }
             catch (Exception ex)
             {
                 _isTrayAvailable = false;
+                _registered = false;
+                _lastRegistrationDetail = ex.GetType().Name + ": " + ex.Message;
                 AppLogger.Warn("TrayIconService: 系统托盘服务初始化失败: " + ex.Message + "，标明 IsTrayAvailable = false");
                 if (_notifyIcon != null)
                 {
@@ -365,6 +474,77 @@ namespace PowerDock.App.Shell
             }
         }
 
+        private void BuildContextMenu()
+        {
+            // 右键菜单: "显示 PowerDock", "刷新设备", "-", "退出 PowerDock"
+            Forms.ContextMenuStrip menu = new Forms.ContextMenuStrip();
+
+            Forms.ToolStripMenuItem itemShow = new Forms.ToolStripMenuItem("显示 PowerDock");
+            itemShow.Click += delegate(object sender, EventArgs e) { TriggerShowMainWindow(); };
+
+            Forms.ToolStripMenuItem itemRefresh = new Forms.ToolStripMenuItem("刷新设备");
+            itemRefresh.Click += delegate(object sender, EventArgs e) { TriggerRefreshDevices(); };
+
+            Forms.ToolStripSeparator itemSep = new Forms.ToolStripSeparator();
+
+            Forms.ToolStripMenuItem itemExit = new Forms.ToolStripMenuItem("退出 PowerDock");
+            itemExit.Click += delegate(object sender, EventArgs e) { TriggerExit(); };
+
+            menu.Items.Add(itemShow);
+            menu.Items.Add(itemRefresh);
+            menu.Items.Add(itemSep);
+            menu.Items.Add(itemExit);
+
+            _notifyIcon.ContextMenuStrip = menu;
+
+            _notifyIcon.MouseClick += delegate(object sender, Forms.MouseEventArgs e)
+            {
+                if (e.Button == Forms.MouseButtons.Left)
+                {
+                    TriggerShowMainWindow();
+                }
+            };
+
+            _notifyIcon.DoubleClick += delegate(object sender, EventArgs e) { TriggerShowMainWindow(); };
+        }
+
+        /// <summary>
+        /// Verifies that this process's icon exists in the notification area by calling
+        /// Shell_NotifyIconGetRect on our own NotifyIcon window (WinForms uses uID=1).
+        /// Never infers success from NotifyIcon.Visible.
+        /// </summary>
+        private bool VerifyRegistration(int timeoutMs, out string detail)
+        {
+            System.Diagnostics.Stopwatch watch = System.Diagnostics.Stopwatch.StartNew();
+            string lastError = null;
+            while (watch.ElapsedMilliseconds < timeoutMs)
+            {
+                Forms.Application.DoEvents();
+                Rectangle rect;
+                int uid;
+                string windowClass;
+                string error;
+                if (NativeMethods.TryGetTrayIconRect(out rect, out uid, out windowClass, out error))
+                {
+                    _registrationRect = rect;
+                    _registrationUid = uid;
+                    _registrationWindowClass = windowClass;
+                    detail = string.Format("GetRect=({0},{1})-({2},{3}) {4}x{5}, uid={6}, class='{7}'",
+                        rect.Left, rect.Top, rect.Right, rect.Bottom, rect.Width, rect.Height, uid, windowClass);
+                    return true;
+                }
+                lastError = error;
+                Thread.Sleep(100);
+            }
+
+            detail = "Shell_NotifyIconGetRect found no registered icon for this process within " + timeoutMs + "ms";
+            if (!string.IsNullOrEmpty(lastError))
+            {
+                detail += "; last error: " + lastError;
+            }
+            return false;
+        }
+
         public void UpdateState(int? percent, bool isCharging, bool isOffline)
         {
             string tip = FormatTooltip(percent, isCharging, isOffline);
@@ -373,7 +553,9 @@ namespace PowerDock.App.Shell
 
         public void UpdateState(int? percent, bool isCharging, bool isOffline, string tooltip)
         {
-            if (_disposed || !_isTrayAvailable || _notifyIcon == null)
+            // Allowed before the icon is visible/registered so the initial render can assign Icon
+            // before Visible=true; availability is tracked separately by IsTrayAvailable.
+            if (_disposed || _notifyIcon == null)
             {
                 return;
             }
@@ -599,3 +781,4 @@ namespace PowerDock.App.Shell
         }
     }
 }
+

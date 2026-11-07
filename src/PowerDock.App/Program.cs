@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Threading;
 using System.Windows;
@@ -16,6 +16,10 @@ namespace PowerDock.App
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
             AppLogger.Initialize(baseDir);
 
+            // Self-test/AUTO-01 values can survive if a previous self-test process was killed
+            // between enable and disable; clean them up on every startup (PR-S0-04 / S0-AUTO-03).
+            int leftoverAutoStartValues = AppShellCleanup();
+
             if (args != null && args.Length > 0)
             {
                 string cmd = args[0].Trim().ToLowerInvariant();
@@ -23,6 +27,10 @@ namespace PowerDock.App
                 if (cmd == "--self-test")
                 {
                     return SelfTestRunner.Run();
+                }
+                else if (cmd == "--diagnose-tray")
+                {
+                    return TrayDiagnostics.Run();
                 }
                 else if (cmd == "--diagnose")
                 {
@@ -45,10 +53,30 @@ namespace PowerDock.App
                     Console.WriteLine("Usage: PowerDock.exe [options]");
                     Console.WriteLine("Options:");
                     Console.WriteLine("  --self-test       Run built-in hardware, window, and storage self-tests");
+                    Console.WriteLine("  --diagnose-tray   Verify tray icon registration via Shell_NotifyIconGetRect");
+                    Console.WriteLine("  --diagnose-tray-failure  Inject tray failure and verify close=>process exit (diagnostic)");
                     Console.WriteLine("  --diagnose [sec]  Run diagnostic sampling mode");
                     Console.WriteLine("  --help            Show this help text");
                     return 0;
                 }
+            }
+
+            bool trayFailureDiagnostic = false;
+            if (args != null)
+            {
+                foreach (string arg in args)
+                {
+                    if (string.Equals(arg, "--diagnose-tray-failure", StringComparison.OrdinalIgnoreCase))
+                    {
+                        trayFailureDiagnostic = true;
+                    }
+                }
+            }
+            if (trayFailureDiagnostic)
+            {
+                App.TrayFailureInjection = true;
+                App.AutoCloseMainWindowMs = 900;
+                AppLogger.Info("Diagnostic tray failure mode: tray registration will fail; window auto-closes after 900ms.");
             }
 
             using (SingleInstanceService singleInstance = new SingleInstanceService())
@@ -94,5 +122,21 @@ namespace PowerDock.App
                 return app.Run();
             }
         }
-    }
+
+        private static int AppShellCleanup()
+        {
+            try
+            {
+                return PowerDock.App.Shell.AutoStartService.CleanupLeftoverTestValues();
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warn("Startup cleanup of autostart test values failed: " + ex.Message);
+                return 0;
+            }
+        }
 }
+}
+
+
+
