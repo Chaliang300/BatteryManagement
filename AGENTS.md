@@ -35,7 +35,7 @@ Windows 桌面电量中心（对外名 **PowerDock**，仓库名 BatteryManageme
 | `src/PowerDock.Core` | 是（`net10.0` SDK 工程：Models / Logger / IDeviceProvider / Storage；State、Scheduling、Alerts 尚未建立） | 是（`dcf1c4f`） | 否 |
 | `src/PowerDock.App` | 是（`net10.0-windows` WPF 工程：Program / App / Diagnostics / Interop / Shell / Windows） | 是（`dcf1c4f`） | 否 |
 | `build.ps1` / `pack.ps1` | 是（`dotnet build` / `dotnet publish` 自包含未裁剪单文件，自带 SDK 探测） | 是（`dcf1c4f`） | 否（包体已测，可接受上限尚未确认，见 D16） |
-| `tests/PowerDock.Core.Tests` | 是（xunit；22 条用例：12 条基线 + 10 条设置存储失败/恢复；测试工程 `net10.0-windows`） | 部分（12 条随 PR-S0-01 `dcf1c4f`；10 条待 PR-S0-02） | 否（`S0-STORE-02` 仍差满盘注入，见验收矩阵） |
+| `tests/PowerDock.Core.Tests` | 是（xunit；22 条用例：12 条基线 + 10 条设置存储失败/恢复；测试工程 `net10.0-windows`） | 部分（12 条随 PR-S0-01 `dcf1c4f`；10 条待 PR-S0-02） | 否（`S0-STORE-02` 已通过，仅剩满盘/ENOSPC 子项，见验收矩阵 §3.3） |
 | `--self-test` 自检 | 是（14 项；本机 14/14 通过） | 是（`dcf1c4f`） | 否（仅本机单轮，未做跨机与多轮） |
 | 设计稿 | 否（画板 02 圆角标注待复核；HTML 组件页预览沿用 r8，见 §2.1 C3） | — | 否 |
 
