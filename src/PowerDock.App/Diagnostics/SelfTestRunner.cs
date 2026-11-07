@@ -266,10 +266,14 @@ namespace PowerDock.App.Diagnostics
                 int sessionId = Process.GetCurrentProcess().SessionId;
                 string expectedPrefix = @"Local\PowerDock_Mutex_";
                 string defaultMutexName = SingleInstanceService.GetDefaultMutexName();
+                string defaultReadyEventName = SingleInstanceService.GetDefaultReadyEventName();
 
+                // Per-user + per-session isolation: "Local\PowerDock_Mutex_<sessionId>_<userSid>".
                 bool formatValid = defaultMutexName != null &&
                                    defaultMutexName.StartsWith(expectedPrefix) &&
-                                   defaultMutexName.EndsWith(sessionId.ToString());
+                                   defaultMutexName.Contains("_" + sessionId + "_") &&
+                                   defaultReadyEventName != null &&
+                                   defaultReadyEventName.StartsWith(@"Local\PowerDock_Ready_");
 
                 string testMutexName = @"Local\PowerDock_Mutex_Test_" + Guid.NewGuid().ToString("N");
                 string dummyPipe1 = "PowerDock_Pipe_Dummy_" + Guid.NewGuid().ToString("N");
@@ -279,21 +283,53 @@ namespace PowerDock.App.Diagnostics
                 bool conflictDetected = false;
                 bool acquireAfterRelease = false;
 
-                using (var svc1 = new SingleInstanceService(testMutexName, dummyPipe1))
-                {
-                    acquire1 = svc1.TryStartAsFirstInstance(null);
+                Func<int, ActivationResult> primaryCallback = delegate(int clientPid) { return ActivationResult.Activated; };
 
-                    using (var svc2 = new SingleInstanceService(testMutexName, dummyPipe1))
+                // A mutex is owned per thread: a same-thread second acquisition is re-entrant and
+                // would look like a successful primary. Run the first instance on its own thread so
+                // this test mirrors the real cross-process case.
+                var ownerReady = new ManualResetEvent(false);
+                var releaseOwner = new ManualResetEvent(false);
+                Exception ownerError = null;
+                Thread ownerThread = new Thread(delegate()
+                {
+                    try
                     {
-                        bool isFirst2 = svc2.TryStartAsFirstInstance(null);
-                        conflictDetected = !isFirst2;
+                        using (var svc1 = new SingleInstanceService(testMutexName, dummyPipe1))
+                        {
+                            acquire1 = svc1.TryStartAsFirstInstance(primaryCallback);
+                            ownerReady.Set();
+                            releaseOwner.WaitOne(10000);
+                        }
                     }
+                    catch (Exception ex)
+                    {
+                        ownerError = ex;
+                        ownerReady.Set();
+                    }
+                });
+                ownerThread.IsBackground = true;
+                ownerThread.Name = "SelfTest_MutexOwner";
+                ownerThread.Start();
+                ownerReady.WaitOne(5000);
+
+                using (var svc2 = new SingleInstanceService(testMutexName, dummyPipe1))
+                {
+                    bool isFirst2 = svc2.TryStartAsFirstInstance(primaryCallback);
+                    conflictDetected = !isFirst2 && svc2.SecondaryExitCode == SingleInstanceExitCodes.Success;
                 }
+
+                releaseOwner.Set();
+                ownerThread.Join(5000);
+                releaseOwner.Close();
+                ownerReady.Close();
 
                 using (var svc3 = new SingleInstanceService(testMutexName, dummyPipe2))
                 {
-                    acquireAfterRelease = svc3.TryStartAsFirstInstance(null);
+                    acquireAfterRelease = svc3.TryStartAsFirstInstance(primaryCallback);
                 }
+
+                if (ownerError != null) throw ownerError;
 
                 bool mutexPassed = formatValid && acquire1 && conflictDetected && acquireAfterRelease;
 
@@ -329,7 +365,7 @@ namespace PowerDock.App.Diagnostics
 
                 bool pipeFormatValid = defaultPipeName != null &&
                                        defaultPipeName.StartsWith(expectedPipePrefix) &&
-                                       defaultPipeName.EndsWith(sessionId.ToString());
+                                       defaultPipeName.Contains("_" + sessionId + "_");
 
                 string testMutexName = @"Local\PowerDock_Mutex_PipeTest_" + Guid.NewGuid().ToString("N");
                 string testPipeName = "PowerDock_Pipe_Test_" + Guid.NewGuid().ToString("N");
@@ -341,22 +377,52 @@ namespace PowerDock.App.Diagnostics
                 bool clientReportedSecond = false;
                 bool waitSuccess = false;
 
-                using (var serverSvc = new SingleInstanceService(testMutexName, testPipeName))
+                // Same reason as MUTEX-01: keep the server instance (and its mutex ownership) on a
+                // dedicated thread so the client really takes the secondary path.
+                var serverReady = new ManualResetEvent(false);
+                var releaseServer = new ManualResetEvent(false);
+                Exception serverError = null;
+                Thread serverThread = new Thread(delegate()
                 {
-                    serverStarted = serverSvc.TryStartAsFirstInstance(delegate()
+                    try
                     {
-                        callbackInvoked = true;
-                        callbackEvent.Set();
-                    });
-
-                    using (var clientSvc = new SingleInstanceService(testMutexName, testPipeName))
-                    {
-                        bool isFirst = clientSvc.TryStartAsFirstInstance(null);
-                        clientReportedSecond = !isFirst;
+                        using (var serverSvc = new SingleInstanceService(testMutexName, testPipeName))
+                        {
+                            serverStarted = serverSvc.TryStartAsFirstInstance(delegate(int clientPid)
+                            {
+                                callbackInvoked = true;
+                                callbackEvent.Set();
+                                return ActivationResult.Activated;
+                            });
+                            serverReady.Set();
+                            releaseServer.WaitOne(10000);
+                        }
                     }
+                    catch (Exception ex)
+                    {
+                        serverError = ex;
+                        serverReady.Set();
+                    }
+                });
+                serverThread.IsBackground = true;
+                serverThread.Name = "SelfTest_PipeServer";
+                serverThread.Start();
+                serverReady.WaitOne(5000);
 
-                    waitSuccess = callbackEvent.WaitOne(3000);
+                using (var clientSvc = new SingleInstanceService(testMutexName, testPipeName))
+                {
+                    bool isFirst = clientSvc.TryStartAsFirstInstance(delegate(int clientPid) { return ActivationResult.Activated; });
+                    clientReportedSecond = !isFirst && clientSvc.SecondaryExitCode == SingleInstanceExitCodes.Success;
                 }
+
+                waitSuccess = callbackEvent.WaitOne(3000);
+                releaseServer.Set();
+                serverThread.Join(5000);
+                releaseServer.Close();
+                serverReady.Close();
+                callbackEvent.Close();
+
+                if (serverError != null) throw serverError;
 
                 bool pipePassed = pipeFormatValid && serverStarted && clientReportedSecond && callbackInvoked && waitSuccess;
 
