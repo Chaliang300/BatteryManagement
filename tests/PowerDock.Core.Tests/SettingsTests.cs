@@ -97,10 +97,15 @@ namespace PowerDock.Core.Tests
             try
             {
                 string path = Path.Combine(dir, "settings.json");
-                // 模拟 .NET Framework + JavaScriptSerializer 时期写出、且被手工改成小写字段名的文件
+                // 模拟 .NET Framework + JavaScriptSerializer 时期写出、且被手工改成小写字段名的文件。
+                // 必须真的带 BOM，否则用例名所称的 BOM 兼容路径没有被覆盖。
                 string legacyJson = "{\"theme\":\"light\",\"widgetsize\":\"small\",\"lowbatterythreshold\":12,"
                                     + "\"alertcooldownminutes\":25,\"showstatusdot\":false}";
-                File.WriteAllText(path, legacyJson, new UTF8Encoding(false));
+                File.WriteAllText(path, legacyJson, new UTF8Encoding(true));
+
+                byte[] head = File.ReadAllBytes(path);
+                Assert.True(head.Length > 3 && head[0] == 0xEF && head[1] == 0xBB && head[2] == 0xBF,
+                    "本用例要求文件真实带 UTF-8 BOM（EF BB BF）");
 
                 var store = new SettingsStore(path);
                 store.Load();
