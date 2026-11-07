@@ -13,8 +13,12 @@ namespace PowerDock.App
         [STAThread]
         public static int Main(string[] args)
         {
+            // First line of Main: arm the first-frame stopwatch (Program.Main -> first Rendering).
+            FirstFrameTimer.Arm();
+
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
             AppLogger.Initialize(baseDir);
+            FirstFrameTimer.LogArmed();
 
             // Self-test/AUTO-01 values can survive if a previous self-test process was killed
             // between enable and disable; clean them up on every startup (PR-S0-04 / S0-AUTO-03).
@@ -27,6 +31,18 @@ namespace PowerDock.App
                 if (cmd == "--self-test")
                 {
                     return SelfTestRunner.Run();
+                }
+                else if (cmd == "--diagnose-window")
+                {
+                    return WindowDiagnostics.RunWindow(false);
+                }
+                else if (cmd == "--diagnose-window-fallback")
+                {
+                    return WindowDiagnostics.RunWindow(true);
+                }
+                else if (cmd == "--diagnose-first-frame")
+                {
+                    return WindowDiagnostics.RunFirstFrame();
                 }
                 else if (cmd == "--diagnose-tray")
                 {
@@ -54,6 +70,9 @@ namespace PowerDock.App
                     Console.WriteLine("Options:");
                     Console.WriteLine("  --self-test       Run built-in hardware, window, and storage self-tests");
                     Console.WriteLine("  --diagnose-tray   Verify tray icon registration via Shell_NotifyIconGetRect");
+                    Console.WriteLine("  --diagnose-window          Report DWM backdrop HRESULTs, read-backs and staged activation");
+                    Console.WriteLine("  --diagnose-window-fallback Force the static fallback branch and report it");
+                    Console.WriteLine("  --diagnose-first-frame     Measure Program.Main -> first CompositionTarget.Rendering");
                     Console.WriteLine("  --diagnose-tray-failure  Inject tray failure and verify close=>process exit (diagnostic)");
                     Console.WriteLine("  --diagnose [sec]  Run diagnostic sampling mode");
                     Console.WriteLine("  --help            Show this help text");
@@ -137,6 +156,7 @@ namespace PowerDock.App
         }
 }
 }
+
 
 
 

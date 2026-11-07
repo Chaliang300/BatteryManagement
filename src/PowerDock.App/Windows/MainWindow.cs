@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using PowerDock.App.Diagnostics;
 using PowerDock.App.Interop;
 using PowerDock.App.Shell;
 using PowerDock.Core.Diagnostics;
@@ -18,6 +19,7 @@ namespace PowerDock.App.Windows
         public const double TitleBarHeightDip = 44.0;
 
         private Border _rootSurface;
+        private WindowBackdropController _backdrop;
         private Grid _mainGrid;
         private Border _titleBar;
         private ContentControl _contentHost;
@@ -46,7 +48,16 @@ namespace PowerDock.App.Windows
 
             BuildVisualTree();
 
-            Loaded += OnWindowLoaded;
+            // Backdrop lifecycle: transparent CompositionTarget, checked frame extension, staged
+            // Acrylic activation, redo on every show/theme/composition change (PR-S0-05).
+            _backdrop = new WindowBackdropController();
+            _backdrop.Attach(this, _rootSurface);
+
+            // First-frame instrumentation: Program.Main arms the stopwatch; this is the first
+            // CompositionTarget.Rendering callback on the UI thread.
+            CompositionTarget.Rendering += OnFirstCompositionRendering;
+            FirstFrameTimer.MarkHandlerRegistered();
+
             Closing += OnWindowClosing;
         }
 
@@ -228,10 +239,15 @@ namespace PowerDock.App.Windows
             }
         }
 
-        private void OnWindowLoaded(object sender, RoutedEventArgs e)
+        public WindowBackdropController Backdrop
         {
-            // 应用 DWM 8px 圆角与 Acrylic 材质 (AGENTS.md §7.1, §7.3, §7.4)
-            DwmHelper.ApplyMainWindowStyle(this, isDark: true);
+            get { return _backdrop; }
+        }
+
+        private void OnFirstCompositionRendering(object sender, EventArgs e)
+        {
+            CompositionTarget.Rendering -= OnFirstCompositionRendering;
+            FirstFrameTimer.NotifyFirstFrame();
         }
 
         private void OnWindowClosing(object sender, CancelEventArgs e)
@@ -283,4 +299,5 @@ namespace PowerDock.App.Windows
         }
     }
 }
+
 
