@@ -32,11 +32,11 @@ Windows 桌面电量中心（对外名 **PowerDock**，仓库名 BatteryManageme
 | --- | --- | --- | --- |
 | `docs/设计方案-v0.1.md` | 是（已整理） | 是（`1f6b6d3`） | 否（待评审与实机验证） |
 | `docs/mockup/`（HTML 还原稿） | 是（方案 A，含双主题与可交互主窗口） | 是（`1f6b6d3`） | 否（已知原型差异见 §2.1） |
-| `src/PowerDock.Core` | 是（`net10.0` SDK 工程：Models / Logger / IDeviceProvider / Storage；State、Scheduling、Alerts 尚未建立） | 否（PR-S0-01） | 否 |
-| `src/PowerDock.App` | 是（`net10.0-windows` WPF 工程：Program / App / Diagnostics / Interop / Shell / Windows） | 否（PR-S0-01） | 否 |
-| `build.ps1` / `pack.ps1` | 是（`dotnet build` / `dotnet publish` 自包含未裁剪单文件，自带 SDK 探测） | 否（PR-S0-01） | 否（包体已测，可接受上限尚未确认，见 D16） |
-| `tests/PowerDock.Core.Tests` | 是（xunit + `net10.0`，12 条用例通过） | 否（PR-S0-01） | 否 |
-| `--self-test` 自检 | 是（14 项；本机 14/14 通过） | 否（PR-S0-01） | 否（仅本机单轮，未做跨机与多轮） |
+| `src/PowerDock.Core` | 是（`net10.0` SDK 工程：Models / Logger / IDeviceProvider / Storage；State、Scheduling、Alerts 尚未建立） | 是（`dcf1c4f`） | 否 |
+| `src/PowerDock.App` | 是（`net10.0-windows` WPF 工程：Program / App / Diagnostics / Interop / Shell / Windows） | 是（`dcf1c4f`） | 否 |
+| `build.ps1` / `pack.ps1` | 是（`dotnet build` / `dotnet publish` 自包含未裁剪单文件，自带 SDK 探测） | 是（`dcf1c4f`） | 否（包体已测，可接受上限尚未确认，见 D16） |
+| `tests/PowerDock.Core.Tests` | 是（xunit；22 条用例：12 条基线 + 10 条设置存储失败/恢复；测试工程 `net10.0-windows`） | 部分（12 条随 PR-S0-01 `dcf1c4f`；10 条待 PR-S0-02） | 否（`S0-STORE-02` 仍差满盘注入，见验收矩阵） |
+| `--self-test` 自检 | 是（14 项；本机 14/14 通过） | 是（`dcf1c4f`） | 否（仅本机单轮，未做跨机与多轮） |
 | 设计稿 | 否（画板 02 圆角标注待复核；HTML 组件页预览沿用 r8，见 §2.1 C3） | — | 否 |
 
 ### 2.1 文档冲突裁决（以本表为准，遇到旧文冲突不许自行选择）
@@ -489,3 +489,4 @@ S0 状态（2026-11-08，口径同 §2）：骨架代码、`build.ps1`/`pack.ps1
 | 2026-11-08 | 补齐首轮工程基线：D16/D17、Provider 与设备身份、刷新与三态、二启与托盘降级、原型差异、S0/S1 验收及发布边界 |
 | 2026-11-08 | 迁移到 .NET 10 SDK 式工程（PR-S0-01）：§2 状态表改为「本地已实现 / PR 已合并 / 验收已通过」三列口径并写入事实；§9 记录 SDK 10.0.403 就地部署与 PATH 无 SDK 的事实；§10 命令改为 `dotnet build`/`dotnet publish` 并补 SDK 探测说明；§11 补 S0 三态状态；`settings.json` 序列化改为 `System.Text.Json` |
 | 2026-11-08 | 证据纪律（PR 文档止血）：§9 加两条陷阱（同 Session 多实例互抢 `Local\PowerDock_Mutex_<sid>` 须串行清场；抓屏管线不可裸信，像素证据须过纯色窗口对照）；§15 加一条交付规则（性能证据必须写测量表达式原文，含是否等待进程退出）；`docs/验收矩阵-v0.1-S0.md` 4 行由「未验证」改判「失败」（TRAY-01/02/03、WIN-03），合计 11 通过 / 6 未验证 / 9 失败 |
+| 2026-11-08 | PR-S0-01 合入 `origin/main`（`dcf1c4f`），§2 表把 `src/`、`build.ps1`/`pack.ps1`、`--self-test` 的合并状态改为「是」；PR-S0-02 补 10 条设置存储失败/恢复用例（单测 12 → 22，测试工程 `net10.0-windows`），新增 `docs/验证记录-v0.1-S0-设置存储.md`；验收矩阵 `S0-STORE-02` 按解除条件（占位句柄 / 目录 ACL 两种机制的真实异常 + 回滚断言）改判「通过」，**满盘/ENOSPC 保留为独立未验证子项**；合计 12 通过 / 5 未验证 / 9 失败 |
