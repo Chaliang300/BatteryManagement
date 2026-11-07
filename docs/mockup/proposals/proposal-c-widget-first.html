@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<title>PowerDock 主界面方案 C · 组件工作台</title>
+<style>
+/* ══════════════════════════════════════════════════════════════
+   方案 C · 组件工作台（Widget-first）
+   主界面以「你的挂件长什么样」为中心，勾选 = 把设备放进/拿出组件。
+   单文件自包含。
+   ══════════════════════════════════════════════════════════════ */
+
+:root{
+  --win:rgba(20,22,30,.86);
+  --card:rgba(255,255,255,.055);
+  --card-hi:rgba(255,255,255,.085);
+  --track:rgba(255,255,255,.12);
+  --fill:rgba(255,255,255,.42);
+  --hair:rgba(255,255,255,.09);
+  --t1:rgba(255,255,255,.94); --t2:rgba(255,255,255,.62);
+  --t3:rgba(255,255,255,.38); --t4:rgba(255,255,255,.20);
+  --accent:#6ba6ff; --accent-soft:rgba(107,166,255,.16);
+  --ok:#34d399; --warn:#ff9f0a; --danger:#ff6b6b; --off:#8a8f99;
+  --sel:rgba(107,166,255,.13);
+  --dock:rgba(24,26,36,.82);
+  --shadow:0 30px 70px -20px rgba(0,0,0,.72);
+  --stage1:#0f1626; --stage2:#1b1032; --page:#07080c;
+  --font:"Inter","SF Pro Text","Segoe UI","Microsoft YaHei UI",system-ui,sans-serif;
+}
+[data-theme="light"]{
+  --win:rgba(255,255,255,.88);
+  --card:rgba(12,14,18,.042);
+  --card-hi:rgba(12,14,18,.07);
+  --track:rgba(12,14,18,.12);
+  --fill:rgba(12,14,18,.38);
+  --hair:rgba(12,14,18,.10);
+  --t1:rgba(12,14,18,.92); --t2:rgba(12,14,18,.58);
+  --t3:rgba(12,14,18,.40); --t4:rgba(12,14,18,.20);
+  --accent:#2f6fe0; --accent-soft:rgba(47,111,224,.12);
+  --ok:#12a870; --warn:#c25e00; --danger:#c0342b; --off:#7c838f;
+  --sel:rgba(47,111,224,.09);
+  --dock:rgba(255,255,255,.84);
+  --shadow:0 30px 70px -20px rgba(15,23,42,.24);
+  --stage1:#e8eefb; --stage2:#fdf2ea; --page:#eef1f7;
+}
+
+*{box-sizing:border-box;}
+html,body{margin:0;}
+body{
+  min-height:100vh;padding:48px 40px 64px;
+  font-family:var(--font);color:var(--t1);
+  background:
+    radial-gradient(820px 520px at 12% 6%, var(--stage1), transparent 70%),
+    radial-gradient(760px 520px at 88% 40%, var(--stage2), transparent 72%),
+    var(--page);
+}
+.doc{max-width:980px;margin:0 auto;}
+.doc__eyebrow{margin:0 0 10px;font-size:11px;font-weight:700;letter-spacing:.18em;color:var(--t3);}
+.doc__title{margin:0;font-size:26px;font-weight:800;letter-spacing:-.02em;}
+.doc__lead{margin:10px 0 0;max-width:700px;font-size:13px;line-height:1.75;color:var(--t2);}
+.doc__tools{display:flex;gap:8px;margin-top:18px;}
+.tool{padding:6px 12px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--t2);font:inherit;font-size:12px;cursor:pointer;}
+.tool:hover{background:var(--card-hi);color:var(--t1);}
+.tool[aria-pressed="true"]{background:var(--accent-soft);border-color:transparent;color:var(--accent);}
+.wrap{margin:34px 0 0;display:flex;justify-content:center;}
+.notes{max-width:980px;margin:34px auto 0;display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+.note{padding:14px 16px;border-radius:10px;border:1px solid var(--hair);background:var(--card);font-size:12px;line-height:1.7;color:var(--t2);}
+.note b{display:block;margin-bottom:5px;font-size:11px;letter-spacing:.1em;color:var(--t3);}
+
+/* ══ 窗口 860×600 ══ */
+.win{
+  position:relative;display:flex;flex-direction:column;
+  width:860px;height:660px;border-radius:8px;overflow:hidden;
+  background:var(--win);border:1px solid var(--hair);
+  backdrop-filter:blur(60px) saturate(170%);
+  box-shadow:var(--shadow);
+}
+.titlebar{display:flex;align-items:center;gap:9px;height:44px;padding:0 10px 0 14px;border-bottom:1px solid var(--hair);flex:none;}
+.brand-mark{width:18px;height:18px;border-radius:5px;background:linear-gradient(160deg,#52a0ff,#1e5ce0);box-shadow:inset 0 1px 0 rgba(255,255,255,.4);}
+.brand-name{font-size:12.5px;font-weight:600;}
+.tb-state{margin-left:auto;font-size:10px;color:var(--t3);}
+.tb-state b{font-weight:600;color:var(--t2);font-variant-numeric:tabular-nums;}
+.wctl{width:64px;height:12px;margin-left:14px;color:var(--t2);opacity:.8;}
+
+/* ── 顶部页签 ── */
+.tabs{display:flex;align-items:center;gap:2px;height:42px;padding:0 18px;border-bottom:1px solid var(--hair);flex:none;}
+.tab{
+  padding:5px 12px;border:0;border-radius:7px;background:transparent;color:var(--t2);
+  font:inherit;font-size:12px;cursor:pointer;
+}
+.tab:hover{background:var(--card);color:var(--t1);}
+.tab.is-on{background:var(--accent-soft);color:var(--accent);font-weight:600;}
+.tabs__state{margin-left:auto;font-size:10px;color:var(--t3);}
+.tabs__state b{color:var(--t2);font-variant-numeric:tabular-nums;}
+
+.body{position:relative;flex:1;min-height:0;padding:14px 18px 74px;display:flex;flex-direction:column;}
+.view{display:none;flex:1;min-height:0;}
+.view.is-on{display:flex;flex-direction:column;}
+
+/* ══ 组件工作台 ══ */
+.wt{display:grid;grid-template-columns:1fr 190px;gap:16px;flex:1;min-height:0;margin-top:12px;}
+
+.stage{
+  position:relative;display:flex;flex:1;align-items:center;justify-content:center;
+  border-radius:11px;border:1px solid var(--hair);min-height:0;
+  background:
+    radial-gradient(400px 260px at 22% 8%, rgba(107,166,255,.16), transparent 70%),
+    radial-gradient(380px 280px at 84% 96%, rgba(180,120,255,.14), transparent 70%),
+    rgba(255,255,255,.02);
+}
+.stage__bar{position:absolute;left:12px;top:10px;display:flex;align-items:baseline;gap:8px;}
+.stage__bar span{font-size:9px;letter-spacing:.14em;color:var(--t4);}
+.stage__bar b{font-size:9px;font-weight:500;color:var(--t3);font-variant-numeric:tabular-nums;}
+.stage__seg{position:absolute;right:10px;top:9px;background:rgba(0,0,0,.22);border-color:transparent;}
+[data-theme="light"] .stage__seg{background:rgba(255,255,255,.6);}
+.stage__seg button{padding:4px 10px;}
+.wt{display:flex;flex:1;min-height:0;margin-top:12px;}
+.stage__hint{
+  position:absolute;left:0;right:0;bottom:10px;text-align:center;
+  font-size:9.5px;color:var(--t4);
+}
+
+/* 挂件：8px 圆角，与主窗口同一约束 */
+.wg{
+  display:flex;flex-direction:column;padding:13px 15px;border-radius:8px;
+  background:linear-gradient(180deg,rgba(255,255,255,.17),rgba(255,255,255,.05) 45%,rgba(255,255,255,.12));
+  border:1px solid rgba(255,255,255,.18);
+  backdrop-filter:blur(24px) saturate(170%);
+  box-shadow:0 16px 34px -10px rgba(0,0,0,.58), inset 0 1px 0 rgba(255,255,255,.35);
+  transition:width .2s ease,height .2s ease,padding .2s ease;
+}
+[data-theme="light"] .wg{background:linear-gradient(180deg,rgba(255,255,255,.94),rgba(255,255,255,.66));border-color:rgba(255,255,255,.9);box-shadow:0 16px 34px -10px rgba(15,23,42,.18), inset 0 1px 0 #fff;}
+.wg__head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px;}
+.wg__head span{font-size:9.5px;font-weight:600;letter-spacing:.1em;color:var(--t3);}
+.wg__head b{font-size:9.5px;font-weight:600;color:var(--t2);}
+.wrow{display:grid;grid-template-columns:7px 1fr 66px 36px;align-items:center;gap:9px;height:27px;}
+.wrow i{width:5px;height:5px;border-radius:50%;background:var(--ok);}
+.wrow i.warn{background:var(--warn);} .wrow i.danger{background:var(--danger);}
+.wrow span.n{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.wrow span.b{height:3px;border-radius:2px;background:var(--track);overflow:hidden;}
+.wrow span.b i{display:block;height:100%;border-radius:2px;background:var(--fill);}
+.wrow span.b i.warn{background:var(--warn);} .wrow span.b i.danger{background:var(--danger);} .wrow span.b i.ok{background:var(--ok);}
+.wrow span.p{font-size:11px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums;}
+.wrow span.p.warn{color:var(--warn);} .wrow span.p.danger{color:var(--danger);} .wrow span.p.ok{color:var(--ok);}
+/* 关掉某一列时整列让位 */
+.wg[data-dot="0"] .wrow{grid-template-columns:1fr 66px 36px;}
+.wg[data-dot="0"] .wrow i{display:none;}
+.wg[data-bar="0"] .wrow span.b{display:none;}
+.wg[data-bar="0"] .wrow{grid-template-columns:7px 1fr 36px;}
+.wg[data-bar="0"][data-dot="0"] .wrow{grid-template-columns:1fr 40px;}
+
+/* 右列控制 */
+.ctl{display:flex;flex-direction:column;min-height:0;}
+.ctl__note{margin:auto 0 0;padding:10px 0 2px;border-top:1px solid var(--hair);font-size:9.5px;line-height:1.6;color:var(--t3);}
+.ctl__group{display:flex;flex:1;flex-direction:column;border-radius:9px;border:1px solid var(--hair);background:var(--card);padding:11px 12px;}
+.ctl__group h3{margin:0 0 9px;font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--t3);}
+.szlist{display:flex;flex-direction:column;gap:2px;}
+.szrow{
+  display:flex;align-items:center;gap:9px;padding:7px;border-radius:6px;border:0;background:transparent;
+  color:var(--t2);font:inherit;font-size:10.5px;cursor:pointer;text-align:left;width:100%;
+}
+.szrow:hover{background:var(--card-hi);}
+.szrow.is-on{background:var(--accent-soft);color:var(--accent);}
+.szrow em{font-style:normal;margin-left:auto;font-size:9px;color:var(--t4);font-variant-numeric:tabular-nums;}
+.szrow.is-on em{color:var(--accent);opacity:.75;}
+.szbox{border:1.4px solid currentColor;border-radius:2px;flex:none;opacity:.8;}
+.szbox.s{width:12px;height:12px;}
+.szbox.m{width:18px;height:11px;}
+.szbox.l{width:16px;height:16px;}
+
+.trow{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 0;border-top:1px solid var(--hair);}
+.trow:first-of-type{border-top:0;}
+.trow span{font-size:10.5px;color:var(--t1);}
+.sw{width:28px;height:16px;border-radius:999px;border:1px solid var(--hair);background:var(--track);position:relative;cursor:pointer;flex:none;}
+.sw::after{content:"";position:absolute;top:1.5px;left:1.5px;width:11px;height:11px;border-radius:50%;background:#fff;transition:transform .16s ease;box-shadow:0 1px 2px rgba(0,0,0,.3);}
+.sw[aria-pressed="true"]{background:var(--accent);border-color:transparent;}
+.sw[aria-pressed="true"]::after{transform:translateX(12px);}
+
+/* ── 设备芯片：把「勾选」变成进出组件的动作 ── */
+.chips{flex:none;margin-top:12px;}
+.chips__head{display:flex;align-items:baseline;gap:8px;margin-bottom:7px;}
+.chips__head h3{margin:0;font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--t3);}
+.chips__head span{font-size:9.5px;color:var(--t4);}
+.chipset{display:flex;flex-wrap:wrap;gap:7px;}
+.dchip{
+  display:inline-flex;align-items:center;gap:7px;height:29px;padding:0 9px;
+  border-radius:8px;border:1px solid var(--hair);background:var(--card);
+  color:var(--t1);font:inherit;font-size:11px;cursor:pointer;
+  transition:border-color .14s ease,background-color .14s ease;
+}
+.dchip svg{width:12px;height:12px;color:var(--t2);flex:none;}
+.dchip .rm{width:13px;height:13px;color:var(--t4);flex:none;}
+.dchip:hover{border-color:var(--t3);}
+.dchip:hover .rm{color:var(--danger);}
+.dchip--add{border-style:dashed;color:var(--t3);background:transparent;}
+.dchip--add:hover{border-color:var(--accent);color:var(--accent);}
+.dchip--empty{color:var(--t4);font-size:10.5px;border-style:dashed;cursor:default;}
+
+/* ── 状态带：概览的第一层，先给结论 ── */
+.ovband{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:10px;flex:none;}
+.ovcell{
+  display:flex;flex-direction:column;gap:3px;padding:9px 12px 10px;
+  border-radius:9px;border:1px solid var(--hair);background:var(--card);
+}
+.ovcell__k{font-size:9.5px;font-weight:600;letter-spacing:.1em;color:var(--t3);}
+.ovcell__k b{color:var(--t2);letter-spacing:0;margin-left:4px;font-variant-numeric:tabular-nums;}
+.ovcell__v{display:flex;align-items:baseline;gap:4px;font-size:20px;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;}
+.ovcell__v small{font-size:10.5px;font-weight:600;color:var(--t3);}
+.ovcell__d{font-size:9.5px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ovcell--alert{border-color:rgba(255,107,107,.3);background:rgba(255,107,107,.07);}
+.ovcell--alert .ovcell__k{color:rgba(255,107,107,.8);}
+.ovcell--alert .ovcell__k b{color:var(--danger);}
+.ovcell--alert .ovcell__v{color:var(--danger);}
+.ovcell--alert .ovcell__d{color:rgba(255,107,107,.75);}
+[data-theme="light"] .ovcell--alert{border-color:rgba(192,52,43,.28);background:rgba(192,52,43,.05);}
+[data-theme="light"] .ovcell--alert .ovcell__k{color:rgba(192,52,43,.85);}
+[data-theme="light"] .ovcell--alert .ovcell__d{color:rgba(192,52,43,.8);}
+
+/* ══ 设备页 ══ */
+.dhead{display:flex;align-items:center;gap:10px;height:30px;flex:none;}
+.dhead h2{margin:0;font-size:12.5px;font-weight:600;}
+.dhead p{margin:0;font-size:10px;color:var(--t3);}
+.dsearch{display:flex;align-items:center;gap:6px;padding:4px 9px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--t3);font-size:10.5px;}
+.dsearch svg{width:11px;height:11px;}
+
+.glist{flex:1;min-height:0;overflow-y:auto;margin-top:8px;}
+.gname{display:flex;align-items:center;gap:8px;margin:10px 0 4px;font-size:9px;font-weight:700;letter-spacing:.12em;color:var(--t3);}
+.gname:first-child{margin-top:0;}
+.gname i{width:5px;height:5px;border-radius:50%;background:var(--t3);}
+.gname i.warn{background:var(--warn);} .gname i.off{background:var(--off);}
+.drow{
+  display:grid;grid-template-columns:22px 16px 1fr 120px 46px 84px;align-items:center;gap:10px;
+  height:42px;padding:0 8px;border-radius:7px;cursor:pointer;
+}
+.drow:hover{background:var(--card);}
+.drow.is-sel{background:var(--sel);box-shadow:inset 2px 0 0 var(--accent);}
+.drow.is-off{opacity:.5;}
+.drow svg.ico{width:14px;height:14px;color:var(--t2);}
+.drow span.nm{font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.drow span.tr{font-size:9.5px;color:var(--t4);margin-left:5px;}
+.drow .bar{height:4px;border-radius:2px;background:var(--track);overflow:hidden;}
+.drow .bar i{display:block;height:100%;border-radius:2px;background:var(--fill);}
+.drow .bar i.warn{background:var(--warn);} .drow .bar i.danger{background:var(--danger);} .drow .bar i.ok{background:var(--ok);}
+.drow .pct{font-size:11.5px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums;}
+.drow .pct.warn{color:var(--warn);} .drow .pct.danger{color:var(--danger);} .drow .pct.ok{color:var(--ok);}
+.drow .state{justify-self:end;font-size:9.5px;color:var(--t4);}
+.drow .state.on{color:var(--accent);}
+
+.chk{
+  display:flex;align-items:center;justify-content:center;width:16px;height:16px;padding:0;
+  border-radius:4px;border:1.4px solid var(--t3);background:transparent;color:transparent;cursor:pointer;
+}
+.chk svg{width:10px;height:10px;}
+.chk[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff;}
+
+.actbar{
+  display:flex;align-items:center;gap:12px;margin-top:10px;padding:9px 12px;
+  border-radius:9px;border:1px solid var(--hair);background:var(--card);flex:none;
+}
+.actbar svg{width:13px;height:13px;color:var(--t2);flex:none;}
+.actbar input{
+  width:120px;padding:3px 7px;border-radius:6px;border:1px solid transparent;background:transparent;
+  color:var(--t1);font:inherit;font-size:11px;font-weight:500;
+}
+.actbar input:hover{border-color:var(--hair);}
+.actbar input:focus{outline:none;border-color:var(--accent);}
+.actbar .src{font-size:9.5px;color:var(--t3);}
+.actbar .acts{margin-left:auto;display:flex;gap:6px;}
+.abtn{padding:5px 10px;border-radius:6px;border:1px solid var(--hair);background:transparent;color:var(--t2);font:inherit;font-size:10px;cursor:pointer;}
+.abtn:hover{background:var(--card-hi);color:var(--t1);}
+
+/* ══ 设置页 ══ */
+.sgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;flex:1;align-content:start;margin-top:8px;}
+.panel{border-radius:10px;border:1px solid var(--hair);background:var(--card);padding:12px 14px;}
+.panel h3{margin:0 0 9px;font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--t3);}
+.srow{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:7px 0;border-top:1px solid var(--hair);}
+.srow:first-of-type{border-top:0;}
+.srow__t{font-size:11px;}
+.srow__d{font-size:9.5px;color:var(--t3);margin-top:2px;line-height:1.45;}
+.swrow{display:flex;align-items:center;gap:6px;font-size:9.5px;color:var(--t3);flex:none;}
+.seg{display:inline-flex;padding:2px;border-radius:6px;background:var(--track);border:1px solid var(--hair);}
+.seg button{padding:3px 8px;border:0;border-radius:5px;background:transparent;color:var(--t2);font:inherit;font-size:10px;cursor:pointer;}
+.seg button.is-on{background:var(--accent-soft);color:var(--accent);}
+.slider{position:relative;width:84px;height:3px;border-radius:2px;background:var(--track);}
+.slider i{position:absolute;inset:0 auto 0 0;border-radius:2px;background:var(--accent);width:var(--v,60%);}
+.slider::after{content:"";position:absolute;top:50%;left:var(--v,60%);width:10px;height:10px;border-radius:50%;background:#fff;border:1px solid rgba(0,0,0,.15);transform:translate(-50%,-50%);box-shadow:0 1px 3px rgba(0,0,0,.35);}
+.val{font-size:9.5px;color:var(--t3);width:28px;text-align:right;font-variant-numeric:tabular-nums;}
+
+/* ── Dock：三个尺寸缩略 + 快捷动作 ── */
+.dock{
+  position:absolute;left:50%;bottom:12px;transform:translateX(-50%);z-index:5;
+  display:flex;align-items:center;gap:3px;padding:5px;
+  border-radius:12px;background:var(--dock);border:1px solid var(--hair);
+  backdrop-filter:blur(20px) saturate(160%);
+  box-shadow:0 12px 28px -12px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.10);
+}
+.dock__sz{
+  display:flex;align-items:center;justify-content:center;width:44px;height:32px;
+  border:0;border-radius:8px;background:transparent;color:var(--t2);cursor:pointer;
+}
+.dock__sz:hover{background:var(--card);color:var(--t1);}
+.dock__sz.is-on{background:var(--accent-soft);color:var(--accent);}
+.dock__sz b{display:block;border:1.4px solid currentColor;border-radius:2px;opacity:.85;}
+.dock__sz[data-size="sm"] b{width:12px;height:12px;}
+.dock__sz[data-size="md"] b{width:20px;height:11px;}
+.dock__sz[data-size="lg"] b{width:17px;height:17px;}
+.dock__sep{width:1px;height:20px;margin:0 3px;background:var(--hair);}
+.dock__btn{
+  display:flex;align-items:center;gap:6px;height:32px;padding:0 10px;border:0;border-radius:8px;
+  background:transparent;color:var(--t2);font:inherit;font-size:10.5px;cursor:pointer;
+}
+.dock__btn svg{width:13px;height:13px;}
+.dock__btn:hover{background:var(--card);color:var(--t1);}
+</style>
+</head>
+<body>
+
+<svg style="display:none" aria-hidden="true"><defs>
+  <symbol id="i-check" viewBox="0 0 12 12"><path d="M2.4 6.2l2.5 2.5 4.7-5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-x" viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 12 12"><path d="M6 2.6v6.8M2.6 6h6.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-bt" viewBox="0 0 12 12"><path d="M6 1.7V10.3M6 1.7L9.2 4.5L3.4 9.4M6 10.3L9.2 7.5L3.4 2.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-usb" viewBox="0 0 12 12"><path d="M6 10.6V3.4M4.4 5L6 3.4L7.6 5M6 7.6L3.3 9V9.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="3.3" cy="10.3" r=".95" fill="currentColor"/></symbol>
+  <symbol id="i-24g" viewBox="0 0 12 12"><circle cx="3.8" cy="6" r="1.4" fill="currentColor"/><path d="M5.59 3.35A3.2 3.2 0 0 1 5.59 8.65" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M6.71 1.69A5.2 5.2 0 0 1 6.71 10.31" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-pc" viewBox="0 0 12 12"><rect x="2" y="2.1" width="8" height="5.4" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M.9 9.7h10.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+  <symbol id="i-search" viewBox="0 0 14 14"><circle cx="6.2" cy="6.2" r="4.1" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M9.3 9.3L12 12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 14 14"><path d="M1.4 7S3.5 3.4 7 3.4 12.6 7 12.6 7 10.5 10.6 7 10.6 1.4 7 1.4 7z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="7" cy="7" r="1.7" fill="currentColor"/></symbol>
+  <symbol id="i-tray" viewBox="0 0 14 14"><rect x="1.6" y="3.4" width="9.4" height="7.2" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="11.4" y="5.4" width="1.4" height="3.2" rx=".7" fill="currentColor"/><rect x="3.4" y="5" width="2" height="4" rx=".7" fill="currentColor"/><rect x="6.2" y="5" width="2" height="4" rx=".7" fill="currentColor"/></symbol>
+  <symbol id="i-wctl" viewBox="0 0 66 12"><rect x="0" y="5.4" width="11" height="1.2" rx=".6" fill="currentColor"/><rect x="27" y="1" width="10" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M54 1l10 10M64 1L54 11" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></symbol>
+</defs></svg>
+
+<div class="doc">
+  <p class="doc__eyebrow">方案 C · WIDGET WORKBENCH</p>
+  <h1 class="doc__title">以组件为中心：勾选就是把设备放进挂件</h1>
+  <p class="doc__lead">
+    首屏先给结论（谁要充电、几台在线、几台在组件），再给产出（挂件实时预览），最后给明细（谁在组件里）。
+    勾选就是把设备放进/拿出挂件，尺寸在右侧和 Dock 里都是同一条。
+  </p>
+  <div class="doc__tools">
+    <button class="tool" id="themeBtn" aria-pressed="false">切到浅色</button>
+    <button class="tool" data-jump="overview">概览</button>
+    <button class="tool" data-jump="devices">设备</button>
+    <button class="tool" data-jump="settings">设置</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="win">
+    <div class="titlebar">
+      <span class="brand-mark"></span>
+      <span class="brand-name">PowerDock</span>
+      <span class="tb-state"><span id="sizeLabel">中 4×2</span> · <b id="onCount">5</b> 台在组件 · 7 台在线</span>
+      <svg class="wctl" aria-hidden="true"><use href="#i-wctl"/></svg>
+    </div>
+
+    <div class="tabs">
+      <button class="tab is-on" data-go="overview">概览</button>
+      <button class="tab" data-go="devices">设备</button>
+      <button class="tab" data-go="settings">设置</button>
+      <span class="tabs__state"><b id="onCount2">5</b> / 8 在组件中</span>
+    </div>
+
+    <div class="body">
+
+      <!-- ══ 组件工作台 ══ -->
+      <section class="view is-on" data-view="overview">
+        <!-- 第一层：结论。谁要充电、几台在线、几台在组件 -->
+        <div class="ovband">
+          <div class="ovcell ovcell--alert">
+            <span class="ovcell__k">需充电 <b>1</b></span>
+            <span class="ovcell__v">18%</span>
+            <span class="ovcell__d">MX Master 3S · 2.4G</span>
+          </div>
+          <div class="ovcell">
+            <span class="ovcell__k">充电中</span>
+            <span class="ovcell__v">1</span>
+            <span class="ovcell__d">本机电池 47%</span>
+          </div>
+          <div class="ovcell">
+            <span class="ovcell__k">在线</span>
+            <span class="ovcell__v">7<small>/ 8</small></span>
+            <span class="ovcell__d">Watch S9 离线</span>
+          </div>
+          <div class="ovcell">
+            <span class="ovcell__k">在组件</span>
+            <span class="ovcell__v">5<small>/ 8</small></span>
+            <span class="ovcell__d">上限 7 台</span>
+          </div>
+        </div>
+
+        <!-- 第二层：产出。挂件占满整幅，尺寸就在它自己的角上 -->
+        <div class="wt">
+          <div class="stage">
+            <div class="stage__bar">
+              <span>挂件预览</span><b id="stageCap">中 4×2 · 362×173</b>
+            </div>
+            <span class="seg stage__seg" id="sizeSeg">
+              <button data-size="sm">小 2×2</button>
+              <button class="is-on" data-size="md">中 4×2</button>
+              <button data-size="lg">大 4×4</button>
+            </span>
+            <div class="wg" id="wg" data-dot="1" data-bar="1" style="width:392px">
+              <div class="wg__head"><span>POWERDOCK</span><b id="wgCount">5 台</b></div>
+              <div id="wgRows"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 第三层：明细。谁在组件里，谁还没进 -->
+        <div class="chips">
+          <div class="chips__head">
+            <h3>在组件中</h3><span>点 × 移出</span>
+          </div>
+          <div class="chipset" id="inChips"></div>
+          <div class="chips__head" style="margin-top:10px">
+            <h3>未加入</h3><span>点 + 加入</span>
+          </div>
+          <div class="chipset" id="outChips"></div>
+        </div>
+      </section>
+
+      <!-- ══ 设备 ══ -->
+      <section class="view" data-view="devices">
+        <div class="dhead">
+          <h2>设备</h2>
+          <p>8 台 · 勾选即进出组件</p>
+          <span class="seg" data-seg style="margin-left:auto">
+            <button class="is-on">电量</button><button>名称</button><button>最近</button>
+          </span>
+          <span class="dsearch"><svg><use href="#i-search"/></svg>搜索</span>
+        </div>
+
+        <div class="glist" id="glist">
+          <div class="drow is-sel" data-name="MX Master 3S" data-pct="18" data-tone="danger" data-tr="2.4G HID">
+            <button class="chk" aria-pressed="true"><svg><use href="#i-check"/></svg></button>
+            <svg class="ico"><use href="#i-24g"/></svg>
+            <span class="nm">MX Master 3S</span>
+            <span class="bar"><i class="danger" style="width:18%"></i></span>
+            <span class="pct danger">18%</span>
+            <span class="state on">在组件中</span>
+          </div>
+
+          <div class="drow" data-name="本机电池" data-pct="47" data-tone="ok" data-tr="系统 WMI · 充电中">
+            <button class="chk" aria-pressed="true"><svg><use href="#i-check"/></svg></button>
+            <svg class="ico"><use href="#i-pc"/></svg>
+            <span class="nm">本机电池 <span class="tr">充电中</span></span>
+            <span class="bar"><i class="ok" style="width:47%"></i></span>
+            <span class="pct ok">47%</span>
+            <span class="state on">在组件中</span>
+          </div>
+          <div class="drow" data-name="相机" data-pct="55" data-tr="USB HID">
+            <button class="chk" aria-pressed="true"><svg><use href="#i-check"/></svg></button>
+            <svg class="ico"><use href="#i-usb"/></svg>
+            <span class="nm">相机</span>
+            <span class="bar"><i style="width:55%"></i></span>
+            <span class="pct">55%</span>
+            <span class="state on">在组件中</span>
+          </div>
+          <div class="drow" data-name="K380 键盘" data-pct="64" data-tr="蓝牙 GATT">
+            <button class="chk" aria-pressed="true"><svg><use href="#i-check"/></svg></button>
+            <svg class="ico"><use href="#i-bt"/></svg>
+            <span class="nm">K380 键盘</span>
+            <span class="bar"><i style="width:64%"></i></span>
+            <span class="pct">64%</span>
+            <span class="state on">在组件中</span>
+          </div>
+          <div class="drow" data-name="Magic Trackpad" data-pct="71" data-tr="蓝牙 GATT">
+            <button class="chk" aria-pressed="false"><svg><use href="#i-check"/></svg></button>
+            <svg class="ico"><use href="#i-bt"/></svg>
+            <span class="nm">Magic Trackpad</span>
+            <span class="bar"><i style="width:71%"></i></span>
+            <span class="pct">71%</span>
+            <span class="state">未加入</span>
+          </div>
+          <div class="drow" data-name="AirPods Pro" data-pct="82" data-tr="蓝牙 GATT">
+            <button class="chk" aria-pressed="true"><svg><use href="#i-check"/></svg></button>
+            <svg class="ico"><use href="#i-bt"/></svg>
+            <span class="nm">AirPods Pro</span>
+            <span class="bar"><i style="width:82%"></i></span>
+            <span class="pct">82%</span>
+            <span class="state on">在组件中</span>
+          </div>
+          <div class="drow" data-name="JBL GO 3" data-pct="100" data-tr="蓝牙 GATT">
+            <button class="chk" aria-pressed="false"><svg><use href="#i-check"/></svg></button>
+            <svg class="ico"><use href="#i-bt"/></svg>
+            <span class="nm">JBL GO 3</span>
+            <span class="bar"><i style="width:100%"></i></span>
+            <span class="pct">100%</span>
+            <span class="state">未加入</span>
+          </div>
+
+          <div class="drow is-off" data-name="Watch S9" data-pct="" data-tr="蓝牙 GATT · 会话失效" data-offline="1">
+            <button class="chk" aria-pressed="false"><svg><use href="#i-check"/></svg></button>
+            <svg class="ico"><use href="#i-bt"/></svg>
+            <span class="nm">Watch S9</span>
+            <span class="bar"><i style="width:31%"></i></span>
+            <span class="pct">—</span>
+            <span class="state">离线</span>
+          </div>
+        </div>
+
+        <div class="actbar">
+          <svg><use href="#i-24g"/></svg>
+          <input id="alias" value="MX Master 3S" aria-label="设备别名">
+          <span class="src" id="aliasSrc">2.4G HID · 18% · 12 秒前</span>
+          <span class="acts">
+            <button class="abtn">置顶</button>
+            <button class="abtn">忽略此设备</button>
+            <button class="abtn">查看日志</button>
+          </span>
+        </div>
+      </section>
+
+      <!-- ══ 设置 ══ -->
+      <section class="view" data-view="settings">
+        <div class="dhead">
+          <h2>设置</h2>
+          <p>界面与行为</p>
+        </div>
+        <div class="sgrid">
+          <div class="panel">
+            <h3>界面</h3>
+            <div class="srow">
+              <div><div class="srow__t">外观</div><div class="srow__d">跟随系统按 Windows 深浅色切换</div></div>
+              <div><span class="seg" data-seg><button class="is-on">深</button><button>浅</button><button>跟随</button></span></div>
+            </div>
+            <div class="srow">
+              <div><div class="srow__t">玻璃强度</div><div class="srow__d">越高越透，文字越难读</div></div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="slider" style="--v:68%"><i></i></span><span class="val">68%</span></div>
+            </div>
+            <div class="srow">
+              <div><div class="srow__t">窗口不透明度</div><div class="srow__d">浅色下限锁 86%</div></div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="slider" style="--v:86%"><i></i></span><span class="val">86%</span></div>
+            </div>
+            <div class="srow">
+              <div><div class="srow__t">挂件置顶</div><div class="srow__d">不进 Alt+Tab、不抢焦点</div></div>
+              <div><button class="sw" aria-pressed="true"></button></div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h3>行为</h3>
+            <div class="srow">
+              <div><div class="srow__t">开机自启</div><div class="srow__d">写当前用户启动项，免管理员</div></div>
+              <div><button class="sw" aria-pressed="true"></button></div>
+            </div>
+            <div class="srow">
+              <div><div class="srow__t">关闭窗口时</div><div class="srow__d">托盘不可用时改为退出</div></div>
+              <div><span class="seg" data-seg><button class="is-on">托盘</button><button>退出</button></span></div>
+            </div>
+            <div class="srow">
+              <div><div class="srow__t">低电量阈值</div><div class="srow__d">30 分钟内同设备不重复提醒</div></div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="slider" style="--v:20%"><i></i></span><span class="val">20%</span></div>
+            </div>
+            <div class="srow">
+              <div><div class="srow__t">托盘图标</div><div class="srow__d">电量环随最低电量变化</div></div>
+              <div><span class="seg" data-seg><button class="is-on">环</button><button>电池</button><button>隐藏</button></span></div>
+            </div>
+          </div>
+
+          <div class="panel" style="grid-column:1 / -1">
+            <h3>组件</h3>
+            <div class="srow">
+              <div><div class="srow__t">每行显示</div><div class="srow__d">关掉某一列，挂件里整列让位</div></div>
+              <div class="swrow">
+                <span>状态点</span><button class="sw" data-col="dot" aria-pressed="true"></button>
+                <span>电量条</span><button class="sw" data-col="bar" aria-pressed="true"></button>
+                <span>百分比</span><button class="sw" data-col="pct" aria-pressed="true"></button>
+              </div>
+            </div>
+            <div class="srow">
+              <div><div class="srow__t">最多显示</div><div class="srow__d">超出按排序截断，不滚屏</div></div>
+              <div><span class="seg" id="maxSeg">
+                <button data-max="3">3</button>
+                <button class="is-on" data-max="5">5</button>
+                <button data-max="7">7</button>
+              </span></div>
+            </div>
+            <div class="srow">
+              <div><div class="srow__t">排序</div><div class="srow__d">列表与挂件共用同一顺序</div></div>
+              <div><span class="seg" data-seg>
+                <button class="is-on">电量</button><button>名称</button><button>最近</button>
+              </span></div>
+            </div>
+          </div>
+
+          <div class="panel" style="grid-column:1 / -1">
+            <h3>刷新与存储</h3>
+            <div class="srow">
+              <div><div class="srow__t">刷新策略</div><div class="srow__d">事件优先 · 充电 15s / 空闲 60s / 隐藏 5min / 省电暂停</div></div>
+              <div><span class="seg" data-seg><button class="is-on">自动</button><button>手动</button></span></div>
+            </div>
+            <div class="srow">
+              <div><div class="srow__t">历史保留</div><div class="srow__d">history/YYYY-MM-DD.jsonl · 5 分钟粒度 · 断连留空</div></div>
+              <div><span class="seg" data-seg><button class="is-on">7 天</button><button>30 天</button></span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Dock -->
+      <div class="dock">
+        <button class="dock__sz" data-size="sm" title="小 2×2"><b></b></button>
+        <button class="dock__sz is-on" data-size="md" title="中 4×2"><b></b></button>
+        <button class="dock__sz" data-size="lg" title="大 4×4"><b></b></button>
+        <span class="dock__sep"></span>
+        <button class="dock__btn"><svg><use href="#i-eye"/></svg>挂件</button>
+        <button class="dock__btn"><svg><use href="#i-tray"/></svg>托盘</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="notes">
+  <div class="note"><b>优点</b>「勾选」被翻译成「把设备放进挂件」这个动作，语义最直白；改动即时反映在预览上，不用切页核对；Dock 放三档尺寸，比藏在设置里更好找。</div>
+  <div class="note"><b>代价</b>主界面把最优位置给了一个盒子，电量列表退居第二页；设备多到 12 台以上时，芯片会长成两排半，「在 / 不在」需要扫视。</div>
+  <div class="note"><b>适合</b>用户主要诉求就是「让挂件显示我想看的那几台」；如果产品定位是「电池仪表盘」，这一版会把主次搞反。</div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  var root=document.documentElement, tBtn=document.getElementById('themeBtn');
+  tBtn.addEventListener('click',function(){
+    var dark=root.getAttribute('data-theme')==='dark';
+    root.setAttribute('data-theme',dark?'light':'dark');
+    tBtn.textContent=dark?'切到深色':'切到浅色';
+    tBtn.setAttribute('aria-pressed',String(!dark));
+  });
+
+  function go(name){
+    document.querySelectorAll('.view').forEach(function(v){ v.classList.toggle('is-on',v.dataset.view===name); });
+    document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('is-on',b.dataset.go===name); });
+  }
+  document.querySelectorAll('.tab').forEach(function(b){ b.addEventListener('click',function(){ go(b.dataset.go); }); });
+  document.querySelectorAll('[data-jump]').forEach(function(b){ b.addEventListener('click',function(){ go(b.dataset.jump); }); });
+
+  /* ── 设备数据（列表与芯片共享）── */
+  var rows=[].slice.call(document.querySelectorAll('#glist .drow'));
+  var onSet=new Set(rows.filter(function(r){ return r.querySelector('.chk').getAttribute('aria-pressed')==='true'; }).map(function(r){ return r.dataset.name; }));
+
+  var ICON={ 'MX Master 3S':'i-24g','本机电池':'i-pc','相机':'i-usb' };
+  var ico=function(n){ return ICON[n]||'i-bt'; };
+
+  var wg=document.getElementById('wg'), wgRows=document.getElementById('wgRows');
+  var wgCount=document.getElementById('wgCount');
+  var onCount=document.getElementById('onCount');
+  var onCount2=document.getElementById('onCount2');
+  var cur={size:'md',max:5,dot:true,bar:true,pct:true};
+
+  function drawWidget(){
+    var list=rows.filter(function(r){ return onSet.has(r.dataset.name) && !r.dataset.offline; }).slice(0,cur.max);
+    wgRows.innerHTML=list.map(function(r){
+      var tone=r.dataset.tone||'';
+      return '<div class="wrow"><i class="'+tone+'"></i><span class="n">'+r.dataset.name+'</span>'+
+        '<span class="b"><i class="'+tone+'" style="width:'+r.dataset.pct+'%"></i></span>'+
+        '<span class="p '+tone+'">'+r.dataset.pct+'%</span></div>';
+    }).join('');
+    wgCount.textContent=list.length+' 台';
+    wg.dataset.dot=cur.dot?'1':'0';
+    wg.dataset.bar=cur.bar?'1':'0';
+    wgRows.style.display='';
+    wgRows.querySelectorAll('.p').forEach(function(p){ p.style.display=cur.pct?'':'none'; });
+    wg.style.width=({sm:196,md:392,lg:392})[cur.size]+'px';
+    wg.style.height=({sm:196,md:0,lg:360})[cur.size]||'auto';
+  }
+
+  function drawChips(){
+    var inBox=document.getElementById('inChips'), outBox=document.getElementById('outChips');
+    var inList=rows.filter(function(r){ return onSet.has(r.dataset.name); });
+    var outList=rows.filter(function(r){ return !onSet.has(r.dataset.name); });
+
+    inBox.innerHTML=inList.length?inList.map(function(r){
+      return '<button class="dchip" data-act="rm" data-name="'+r.dataset.name+'">'+
+        '<svg><use href="#'+ico(r.dataset.name)+'"/></svg>'+r.dataset.name+
+        '<svg class="rm"><use href="#i-x"/></svg></button>';
+    }).join(''):'<span class="dchip dchip--empty">组件里还没有设备</span>';
+
+    outBox.innerHTML=outList.length?outList.map(function(r){
+      return '<button class="dchip dchip--add" data-act="add" data-name="'+r.dataset.name+'">'+
+        '<svg><use href="#i-plus"/></svg>'+r.dataset.name+'</button>';
+    }).join(''):'<span class="dchip dchip--empty">全部设备都在组件里</span>';
+  }
+
+  function render(){
+    rows.forEach(function(r){
+      var on=onSet.has(r.dataset.name);
+      r.querySelector('.chk').setAttribute('aria-pressed',on?'true':'false');
+      var st=r.querySelector('.state');
+      st.textContent=r.dataset.offline==='1'?'离线':(on?'在组件中':'未加入');
+      st.classList.toggle('on',on);
+    });
+    onCount.textContent=onSet.size;
+    onCount2.textContent=onSet.size;
+    drawWidget();
+    drawChips();
+  }
+
+  function toggle(name){
+    if(onSet.has(name)) onSet.delete(name); else onSet.add(name);
+    render();
+  }
+
+  rows.forEach(function(r){
+    r.querySelector('.chk').addEventListener('click',function(e){
+      e.stopPropagation();
+      toggle(r.dataset.name);
+    });
+    r.addEventListener('click',function(){
+      rows.forEach(function(x){ x.classList.remove('is-sel'); });
+      r.classList.add('is-sel');
+      document.getElementById('alias').value=r.dataset.name;
+      document.getElementById('aliasSrc').textContent=(r.dataset.tr||'—')+' · '+(r.dataset.pct?r.dataset.pct+'%':'—');
+    });
+  });
+
+  document.querySelector('.chips').addEventListener('click',function(e){
+    var b=e.target.closest('[data-act]');
+    if(!b) return;
+    toggle(b.dataset.name);
+  });
+
+  /* 尺寸：右列与 Dock 双向同步 */
+  function setSize(s){
+    cur.size=s;
+    document.getElementById('sizeLabel').textContent=({sm:'小 2×2',md:'中 4×2',lg:'大 4×4'})[s];
+    document.getElementById('stageCap').textContent=({sm:'小 2×2 · 173×173',md:'中 4×2 · 362×173',lg:'大 4×4 · 362×362'})[s];
+    document.querySelectorAll('[data-size]').forEach(function(b){ b.classList.toggle('is-on',b.dataset.size===s); });
+    drawWidget();
+  }
+  document.querySelectorAll('[data-size]').forEach(function(b){
+    b.addEventListener('click',function(){ setSize(b.dataset.size); });
+  });
+
+  document.querySelectorAll('[data-col]').forEach(function(sw){
+    sw.addEventListener('click',function(){
+      var on=sw.getAttribute('aria-pressed')!=='true';
+      sw.setAttribute('aria-pressed',String(on));
+      cur[sw.dataset.col]=on;
+      drawWidget();
+    });
+  });
+
+  document.querySelectorAll('#maxSeg button').forEach(function(b){
+    b.addEventListener('click',function(){
+      document.querySelectorAll('#maxSeg button').forEach(function(x){ x.classList.remove('is-on'); });
+      b.classList.add('is-on');
+      cur.max=parseInt(b.dataset.max,10);
+      drawWidget();
+    });
+  });
+
+  document.querySelectorAll('[data-seg]').forEach(function(seg){
+    seg.addEventListener('click',function(e){
+      var b=e.target.closest('button'); if(!b) return;
+      seg.querySelectorAll('button').forEach(function(x){ x.classList.remove('is-on'); });
+      b.classList.add('is-on');
+    });
+  });
+  document.querySelectorAll('.sw:not([data-col])').forEach(function(s){
+    s.addEventListener('click',function(){
+      s.setAttribute('aria-pressed',s.getAttribute('aria-pressed')==='true'?'false':'true');
+    });
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1357 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PowerDock · 液态玻璃界面设计还原</title>
+<meta name="description" content="PowerDock 电量聚合工具的界面设计还原：组件系统、主界面、连接状态、图标与托盘、配置页。">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ───────── SVG 符号库：图标统一用 currentColor，主题切换自动继承 ───────── -->
+<svg class="svg-defs" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="ico-bt" viewBox="0 0 12 12">
+      <path d="M6 1.7V10.3M6 1.7L9.2 4.5L3.4 9.4M6 10.3L9.2 7.5L3.4 2.6"
+            fill="none" stroke="currentColor" stroke-width="1.5"
+            stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="ico-usb" viewBox="0 0 12 12">
+      <path d="M6 10.6V3.4M4.4 5L6 3.4L7.6 5M6 7.6L3.3 9V9.6"
+            fill="none" stroke="currentColor" stroke-width="1.5"
+            stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="3.3" cy="10.3" r="0.95" fill="currentColor"/>
+    </symbol>
+    <symbol id="ico-24g" viewBox="0 0 12 12">
+      <circle cx="3.8" cy="6" r="1.4" fill="currentColor"/>
+      <path d="M5.59 3.35A3.2 3.2 0 0 1 5.59 8.65" fill="none"
+            stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      <path d="M6.71 1.69A5.2 5.2 0 0 1 6.71 10.31" fill="none"
+            stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="ico-pc" viewBox="0 0 12 12">
+      <rect x="2" y="2.1" width="8" height="5.4" rx="1.2" fill="none"
+            stroke="currentColor" stroke-width="1.5"/>
+      <path d="M0.9 9.7H11.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+    </symbol>
+    <!-- 充电中：只出现在列表的百分比位与详情页，不参与阈值着色 -->
+    <symbol id="ico-bolt" viewBox="0 0 12 12">
+      <path d="M7.05 0.9L2.6 6.9h2.85L4.8 11.1 9.4 5.1H6.55z" fill="currentColor"/>
+    </symbol>
+    <symbol id="ico-battery" viewBox="0 0 256 256">
+      <rect x="48" y="88" width="160" height="80" rx="22" fill="none"
+            stroke="currentColor" stroke-width="11"/>
+      <rect x="207" y="112" width="13" height="32" rx="6.5" fill="currentColor"/>
+      <rect x="56" y="104" width="44" height="48" rx="8" fill="currentColor"/>
+      <rect x="106" y="104" width="44" height="48" rx="8" fill="currentColor"/>
+      <rect x="156" y="104" width="44" height="48" rx="8" fill="currentColor"/>
+    </symbol>
+    <!-- 托盘三态：格数由结构决定，颜色由父级 currentColor 决定 -->
+    <symbol id="tray-normal" viewBox="0 0 24 24">
+      <rect x="2" y="6.6" width="17" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      <rect x="19.6" y="9.8" width="2.4" height="4.4" rx="1.2" fill="currentColor"/>
+      <rect x="4.4" y="8.9" width="3.6" height="6.2" rx="1.1" fill="currentColor"/>
+      <rect x="9.2" y="8.9" width="3.6" height="6.2" rx="1.1" fill="currentColor"/>
+      <rect x="14" y="8.9" width="3.6" height="6.2" rx="1.1" fill="currentColor"/>
+    </symbol>
+    <symbol id="tray-mid" viewBox="0 0 24 24">
+      <rect x="2" y="6.6" width="17" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      <rect x="19.6" y="9.8" width="2.4" height="4.4" rx="1.2" fill="currentColor"/>
+      <rect x="4.4" y="8.9" width="3.6" height="6.2" rx="1.1" fill="currentColor"/>
+      <rect x="9.2" y="8.9" width="3.6" height="6.2" rx="1.1" fill="currentColor"/>
+      <rect x="14" y="8.9" width="3.6" height="6.2" rx="1.1" fill="currentColor" fill-opacity=".14"/>
+    </symbol>
+    <symbol id="tray-low" viewBox="0 0 24 24">
+      <rect x="2" y="6.6" width="17" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      <rect x="19.6" y="9.8" width="2.4" height="4.4" rx="1.2" fill="currentColor"/>
+      <rect x="4.4" y="8.9" width="3.6" height="6.2" rx="1.1" fill="currentColor"/>
+      <rect x="9.2" y="8.9" width="3.6" height="6.2" rx="1.1" fill="currentColor" fill-opacity=".14"/>
+      <rect x="14" y="8.9" width="3.6" height="6.2" rx="1.1" fill="currentColor" fill-opacity=".14"/>
+    </symbol>
+    <symbol id="ico-wincontrols" viewBox="0 0 66 12">
+      <rect x="0" y="5.4" width="11" height="1.2" rx="0.6" fill="currentColor"/>
+      <rect x="27" y="1" width="10" height="10" rx="1.5" fill="none"
+            stroke="currentColor" stroke-width="1.1"/>
+      <path d="M54 1L64 11M64 1L54 11" stroke="currentColor"
+            stroke-width="1.1" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="ico-check" viewBox="0 0 12 12">
+      <path d="M2.4 6.2l2.5 2.5 4.7-5" fill="none" stroke="currentColor"
+            stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="ico-x" viewBox="0 0 12 12">
+      <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="ico-plus" viewBox="0 0 12 12">
+      <path d="M6 2.6v6.8M2.6 6h6.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="ico-search" viewBox="0 0 14 14">
+      <circle cx="6.2" cy="6.2" r="4.1" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <path d="M9.3 9.3L12 12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="ico-eye" viewBox="0 0 14 14">
+      <path d="M1.4 7S3.5 3.4 7 3.4 12.6 7 12.6 7 10.5 10.6 7 10.6 1.4 7 1.4 7z"
+            fill="none" stroke="currentColor" stroke-width="1.3"/>
+      <circle cx="7" cy="7" r="1.7" fill="currentColor"/>
+    </symbol>
+    <symbol id="ico-tray" viewBox="0 0 14 14">
+      <rect x="1.6" y="3.4" width="9.4" height="7.2" rx="2" fill="none"
+            stroke="currentColor" stroke-width="1.3"/>
+      <rect x="11.4" y="5.4" width="1.4" height="3.2" rx=".7" fill="currentColor"/>
+      <rect x="3.4" y="5" width="2" height="4" rx=".7" fill="currentColor"/>
+      <rect x="6.2" y="5" width="2" height="4" rx=".7" fill="currentColor"/>
+    </symbol>
+    <symbol id="ico-grid" viewBox="0 0 16 16">
+      <rect x="2" y="2" width="5" height="5" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <rect x="9" y="2" width="5" height="5" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <rect x="2" y="9" width="5" height="5" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <rect x="9" y="9" width="5" height="5" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+    </symbol>
+    <symbol id="ico-list" viewBox="0 0 16 16">
+      <circle cx="3.4" cy="4" r="1.3" fill="currentColor"/>
+      <circle cx="3.4" cy="8" r="1.3" fill="currentColor"/>
+      <circle cx="3.4" cy="12" r="1.3" fill="currentColor"/>
+      <path d="M7 4h7M7 8h7M7 12h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="ico-widget" viewBox="0 0 16 16">
+      <rect x="1.6" y="1.6" width="6" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <rect x="8.4" y="1.6" width="6" height="6" rx="1.6" fill="currentColor"/>
+      <rect x="1.6" y="8.4" width="6" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <rect x="8.4" y="8.4" width="6" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/>
+    </symbol>
+    <symbol id="ico-sliders" viewBox="0 0 16 16">
+      <path d="M2 4.6h12M2 11.4h12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      <circle cx="5.4" cy="4.6" r="1.9" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <circle cx="10.6" cy="11.4" r="1.9" fill="none" stroke="currentColor" stroke-width="1.4"/>
+    </symbol>
+    <symbol id="ico-wifi" viewBox="0 0 16 16">
+      <path d="M2.6 6.2A7.8 7.8 0 0 1 13.4 6.2" fill="none"
+            stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      <path d="M5 9A4.6 4.6 0 0 1 11 9" fill="none"
+            stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      <circle cx="8" cy="11.9" r="1.15" fill="currentColor"/>
+    </symbol>
+    <symbol id="ico-volume" viewBox="0 0 16 16">
+      <path d="M2.6 6.1H5.1L8.1 3.3V12.7L5.1 9.9H2.6Z" fill="currentColor"/>
+      <path d="M10.5 5.9A3.1 3.1 0 0 1 10.5 10.1" fill="none"
+            stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+    </symbol>
+  </defs>
+</svg>
+
+<!-- ───────── 顶栏 ───────── -->
+<header class="topbar">
+  <a class="topbar__brand" href="#top">
+    <span class="topbar__mark" aria-hidden="true">
+      <svg viewBox="0 0 256 256"><use href="#ico-battery"/></svg>
+    </span>
+    <span>PowerDock</span>
+  </a>
+
+  <nav class="topbar__nav" aria-label="章节导航">
+    <a href="#widgets">组件</a>
+    <a href="#window">主界面</a>
+    <a href="#status">状态</a>
+    <a href="#icons">图标</a>
+    <a href="#transports">链路</a>
+    <a href="#config">配置</a>
+    <a href="#desktop">桌面</a>
+  </nav>
+
+  <div class="topbar__tools">
+    <div class="seg" role="group" aria-label="外观切换">
+      <button class="seg__btn is-active" type="button" data-set-theme="dark">深色</button>
+      <button class="seg__btn" type="button" data-set-theme="light">浅色</button>
+    </div>
+    <button class="wallpaper-btn" type="button" id="wallpaperBtn" aria-label="切换壁纸">壁纸</button>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ───────── 封面 ───────── -->
+  <section class="hero">
+    <p class="eyebrow">LIQUID GLASS · WINDOWS</p>
+    <h1>PowerDock 界面设计还原</h1>
+    <p class="hero__sub">
+      不装驱动、不联网、绿色运行。聚合蓝牙外设、2.4G / USB 有线 HID 与本机电池的电量，
+      通过桌面挂件、主窗口、托盘三处呈现。视觉语言借用 iOS 26 的液态玻璃，但落在 Windows 的窗口规则上。
+    </p>
+    <dl class="hero__meta">
+      <div><dt>组件尺寸</dt><dd>173 / 362 px</dd></div>
+      <div><dt>圆角</dt><dd>22 · 27 · 8 DIP</dd></div>
+      <div><dt>品牌色</dt><dd>#4C8DFF</dd></div>
+      <div><dt>状态色</dt><dd>#34D399 / #8A8F99</dd></div>
+    </dl>
+  </section>
+
+  <!-- ═════════ 01 组件系统 ═════════ -->
+  <section class="section" id="widgets">
+    <header class="section__head">
+      <p class="eyebrow">01 · WIDGET SYSTEM</p>
+      <h2>一条基线，三档密度</h2>
+      <p class="section__sub">
+        三档共用同一行结构：链路图标 · 名称 · 电量条 · 百分比。变的是行数，不是字号。
+        小号装不下四列，条改为独占一行 —— 这是唯一的重排。
+      </p>
+    </header>
+
+    <div class="widget-matrix">
+      <!-- 浅色行 -->
+      <div class="theme-scope" data-theme="light">
+        <p class="scope-label">浅色外观 · LIGHT</p>
+        <div class="widget-deck">
+          <!-- 小号 -->
+          <article class="widget widget--sm" aria-label="小号组件，浅色">
+            <ul class="wlist wlist--sm">
+              <li class="dev" data-state="online">
+                <span class="dev__dot"></span>
+                <div class="dev__line">
+                  <svg class="dev__ico" aria-hidden="true"><use href="#ico-24g"/></svg>
+                  <span class="dev__name">MX Master 3S</span>
+                  <span class="dev__pct">23%</span>
+                </div>
+                <span class="dev__bar"><i style="--pct:23%"></i></span>
+              </li>
+              <li class="dev" data-state="online">
+                <span class="dev__dot"></span>
+                <div class="dev__line">
+                  <svg class="dev__ico" aria-hidden="true"><use href="#ico-pc"/></svg>
+                  <span class="dev__name">相机</span>
+                  <span class="dev__pct">55%</span>
+                </div>
+                <span class="dev__bar"><i style="--pct:55%"></i></span>
+              </li>
+              <li class="dev" data-state="offline">
+                <span class="dev__dot"></span>
+                <div class="dev__line">
+                  <svg class="dev__ico" aria-hidden="true"><use href="#ico-bt"/></svg>
+                  <span class="dev__name">AirPods Pro</span>
+                  <span class="dev__pct">—</span>
+                </div>
+                <span class="dev__bar"><i style="--pct:82%"></i></span>
+              </li>
+            </ul>
+          </article>
+
+          <!-- 中号 -->
+          <article class="widget widget--md" aria-label="中号组件，浅色">
+            <ul class="wlist">
+              <li class="dev" data-state="online">
+                <span class="dev__dot"></span>
+                <svg class="dev__ico" aria-hidden="true"><use href="#ico-24g"/></svg>
+                <span class="dev__name">MX Master 3S</span>
+                <span class="dev__bar"><i style="--pct:23%"></i></span>
+                <span class="dev__pct">23%</span>
+              </li>
+              <li class="dev" data-state="online">
+                <span class="dev__dot"></span>
+                <svg class="dev__ico" aria-hidden="true"><use href="#ico-pc"/></svg>
+                <span class="dev__name">本机电池</span>
+                <span class="dev__bar"><i style="--pct:47%"></i></span>
+                <span class="dev__pct">47%</span>
+              </li>
+              <li class="dev" data-state="online">
+                <span class="dev__dot"></span>
+                <svg class="dev__ico" aria-hidden="true"><use href="#ico-usb"/></svg>
+                <span class="dev__name">相机</span>
+                <span class="dev__bar"><i style="--pct:55%"></i></span>
+                <span class="dev__pct">55%</span>
+              </li>
+              <li class="dev" data-state="online">
+                <span class="dev__dot"></span>
+                <svg class="dev__ico" aria-hidden="true"><use href="#ico-bt"/></svg>
+                <span class="dev__name">K380 键盘</span>
+                <span class="dev__bar"><i style="--pct:64%"></i></span>
+                <span class="dev__pct">64%</span>
+              </li>
+              <li class="dev" data-state="offline">
+                <span class="dev__dot"></span>
+                <svg class="dev__ico" aria-hidden="true"><use href="#ico-bt"/></svg>
+                <span class="dev__name">Watch S9</span>
+                <span class="dev__bar"><i style="--pct:68%"></i></span>
+                <span class="dev__pct">—</span>
+              </li>
+            </ul>
+          </article>
+        </div>
+      </div>
+
+      <!-- 深色行 -->
+      <div class="theme-scope" data-theme="dark">
+        <p class="scope-label">深色外观 · DARK</p>
+        <div class="widget-deck">
+          <article class="widget widget--sm" aria-label="小号组件，深色">
+            <ul class="wlist wlist--sm">
+              <li class="dev" data-state="online">
+                <span class="dev__dot"></span>
+                <div class="dev__line">
+                  <svg class="dev__ico" aria-hidden="true"><use href="#ico-24g"/></svg>
+                  <span class="dev__name">MX Master 3S</span>
+                  <span class="dev__pct">23%</span>
+                </div>
+                <span class="dev__bar"><i style="--pct:23%"></i></span>
+              </li>
+              <li class="dev" data-state="online">
+                <span class="dev__dot"></span>
+                <div class="dev__line">
+                  <svg class="dev__ico" aria-hidden="true"><use href="#ico-pc"/></svg>
+                  <span class="dev__name">相机</span>
+                  <span class="dev__pct">55%</span>
+                </div>
+                <span class="dev__bar"><i style="--pct:55%"></i></span>
+              </li>
+              <li class="dev" data-state="offline">
+                <span class="dev__dot"></span>
+                <div class="dev__line">
+                  <svg class="dev__ico" aria-hidden="true"><use href="#ico-bt"/></svg>
+                  <span class="dev__name">AirPods Pro</span>
+                  <span class="dev__pct">—</span>
+                </div>
+                <span class="dev__bar"><i style="--pct:82%"></i></span>
+              </li>
+            </ul>
+          </article>
+
+          <article class="widget widget--md" aria-label="中号组件，深色">
+            <ul class="wlist">
+              <li class="dev" data-state="online">
+                <span class="dev__dot"></span>
+                <svg class="dev__ico" aria-hidden="true"><use href="#ico-24g"/></svg>
+                <span class="dev__name">MX Master 3S</span>
+                <span class="dev__bar"><i style="--pct:23%"></i></span>
+                <span class="dev__pct">23%</span>
+              </li>
+              <li class="dev" data-state="online">
+                <span class="dev__dot"></span>
+                <svg class="dev__ico" aria-hidden="true"><use href="#ico-pc"/></svg>
+                <span class="dev__name">本机电池</span>
+                <span class="dev__bar"><i style="--pct:47%"></i></span>
+                <span class="dev__pct">47%</span>
+              </li>
+              <li class="dev" data-state="online">
+                <span class="dev__dot"></span>
+                <svg class="dev__ico" aria-hidden="true"><use href="#ico-usb"/></svg>
+                <span class="dev__name">相机</span>
+                <span class="dev__bar"><i style="--pct:55%"></i></span>
+                <span class="dev__pct">55%</span>
+              </li>
+              <li class="dev" data-state="online">
+                <span class="dev__dot"></span>
+                <svg class="dev__ico" aria-hidden="true"><use href="#ico-bt"/></svg>
+                <span class="dev__name">K380 键盘</span>
+                <span class="dev__bar"><i style="--pct:64%"></i></span>
+                <span class="dev__pct">64%</span>
+              </li>
+              <li class="dev" data-state="offline">
+                <span class="dev__dot"></span>
+                <svg class="dev__ico" aria-hidden="true"><use href="#ico-bt"/></svg>
+                <span class="dev__name">Watch S9</span>
+                <span class="dev__bar"><i style="--pct:68%"></i></span>
+                <span class="dev__pct">—</span>
+              </li>
+            </ul>
+          </article>
+        </div>
+      </div>
+
+      <!-- 大号 -->
+      <div class="theme-scope" data-theme="light">
+        <p class="scope-label">大号 · LARGE（浅色）</p>
+        <article class="widget widget--lg" aria-label="大号组件，浅色">
+          <ul class="wlist wlist--lg">
+            <li class="dev" data-state="online">
+              <span class="dev__dot"></span>
+              <svg class="dev__ico" aria-hidden="true"><use href="#ico-24g"/></svg>
+              <span class="dev__name">MX Master 3S</span>
+              <span class="dev__bar"><i style="--pct:23%"></i></span>
+              <span class="dev__pct">23%</span>
+            </li>
+            <li class="dev" data-state="online">
+              <span class="dev__dot"></span>
+              <svg class="dev__ico" aria-hidden="true"><use href="#ico-pc"/></svg>
+              <span class="dev__name">本机电池</span>
+              <span class="dev__bar"><i style="--pct:47%"></i></span>
+              <span class="dev__pct">47%</span>
+            </li>
+            <li class="dev" data-state="online">
+              <span class="dev__dot"></span>
+              <svg class="dev__ico" aria-hidden="true"><use href="#ico-usb"/></svg>
+              <span class="dev__name">相机</span>
+              <span class="dev__bar"><i style="--pct:55%"></i></span>
+              <span class="dev__pct">55%</span>
+            </li>
+            <li class="dev" data-state="online">
+              <span class="dev__dot"></span>
+              <svg class="dev__ico" aria-hidden="true"><use href="#ico-bt"/></svg>
+              <span class="dev__name">K380 键盘</span>
+              <span class="dev__bar"><i style="--pct:64%"></i></span>
+              <span class="dev__pct">64%</span>
+            </li>
+            <li class="dev" data-state="online">
+              <span class="dev__dot"></span>
+              <svg class="dev__ico" aria-hidden="true"><use href="#ico-bt"/></svg>
+              <span class="dev__name">Watch S9</span>
+              <span class="dev__bar"><i style="--pct:68%"></i></span>
+              <span class="dev__pct">68%</span>
+            </li>
+            <li class="dev" data-state="online">
+              <span class="dev__dot"></span>
+              <svg class="dev__ico" aria-hidden="true"><use href="#ico-bt"/></svg>
+              <span class="dev__name">AirPods Pro</span>
+              <span class="dev__bar"><i style="--pct:82%"></i></span>
+              <span class="dev__pct">82%</span>
+            </li>
+            <li class="dev" data-state="offline">
+              <span class="dev__dot"></span>
+              <svg class="dev__ico" aria-hidden="true"><use href="#ico-usb"/></svg>
+              <span class="dev__name">触控笔</span>
+              <span class="dev__bar"><i style="--pct:91%"></i></span>
+              <span class="dev__pct">—</span>
+            </li>
+          </ul>
+          <p class="widget__foot">共 8 台 · 6 在线 · 按电量升序 · 空闲 60s 刷新</p>
+        </article>
+      </div>
+
+      <div class="theme-scope" data-theme="dark">
+        <p class="scope-label">大号 · LARGE（深色）</p>
+        <article class="widget widget--lg" aria-label="大号组件，深色">
+          <ul class="wlist wlist--lg">
+            <li class="dev" data-state="online">
+              <span class="dev__dot"></span>
+              <svg class="dev__ico" aria-hidden="true"><use href="#ico-24g"/></svg>
+              <span class="dev__name">MX Master 3S</span>
+              <span class="dev__bar"><i style="--pct:23%"></i></span>
+              <span class="dev__pct">23%</span>
+            </li>
+            <li class="dev" data-state="online">
+              <span class="dev__dot"></span>
+              <svg class="dev__ico" aria-hidden="true"><use href="#ico-pc"/></svg>
+              <span class="dev__name">本机电池</span>
+              <span class="dev__bar"><i style="--pct:47%"></i></span>
+              <span class="dev__pct">47%</span>
+            </li>
+            <li class="dev" data-state="online">
+              <span class="dev__dot"></span>
+              <svg class="dev__ico" aria-hidden="true"><use href="#ico-usb"/></svg>
+              <span class="dev__name">相机</span>
+              <span class="dev__bar"><i style="--pct:55%"></i></span>
+              <span class="dev__pct">55%</span>
+            </li>
+            <li class="dev" data-state="online">
+              <span class="dev__dot"></span>
+              <svg class="dev__ico" aria-hidden="true"><use href="#ico-bt"/></svg>
+              <span class="dev__name">K380 键盘</span>
+              <span class="dev__bar"><i style="--pct:64%"></i></span>
+              <span class="dev__pct">64%</span>
+            </li>
+            <li class="dev" data-state="online">
+              <span class="dev__dot"></span>
+              <svg class="dev__ico" aria-hidden="true"><use href="#ico-bt"/></svg>
+              <span class="dev__name">Watch S9</span>
+              <span class="dev__bar"><i style="--pct:68%"></i></span>
+              <span class="dev__pct">68%</span>
+            </li>
+            <li class="dev" data-state="online">
+              <span class="dev__dot"></span>
+              <svg class="dev__ico" aria-hidden="true"><use href="#ico-bt"/></svg>
+              <span class="dev__name">AirPods Pro</span>
+              <span class="dev__bar"><i style="--pct:82%"></i></span>
+              <span class="dev__pct">82%</span>
+            </li>
+            <li class="dev" data-state="offline">
+              <span class="dev__dot"></span>
+              <svg class="dev__ico" aria-hidden="true"><use href="#ico-usb"/></svg>
+              <span class="dev__name">触控笔</span>
+              <span class="dev__bar"><i style="--pct:91%"></i></span>
+              <span class="dev__pct">—</span>
+            </li>
+          </ul>
+          <p class="widget__foot">共 8 台 · 6 在线 · 按电量升序 · 空闲 60s 刷新</p>
+        </article>
+      </div>
+    </div>
+
+    <p class="hint">
+      提示：点击任意设备行可以切换「在线 / 离线」，观察状态点与整行的过渡。
+    </p>
+  </section>
+
+  <!-- ═════════ 02 主界面 ═════════ -->
+  <section class="section" id="window">
+    <header class="section__head">
+      <p class="eyebrow">02 · MAIN WINDOW</p>
+      <h2>概览先给结论，再给焦点，最后给全貌</h2>
+      <p class="section__sub">
+        首屏三层：<b>状态带</b>四个数回答要不要充电、几台在线、组件里几台；<b>焦点</b>是一台要处理的（含 7 天趋势）
+        加两台要知道的；<b>全貌</b>把 8 台排成一条，一台不漏但不重复列表。Dock 是唯一导航，勾选落在设备卡右上角。
+        窗口 880×600、圆角 8 —— DWM 只有 0 / 4 / 8 三档。挂件是透明自绘窗口，不受这条限制，仍用 r22 / r27。
+      </p>
+    </header>
+
+    <div class="window-stage">
+      <div class="theme-scope" data-theme="dark">
+        <p class="scope-label">深色 · 概览（可点 Dock 切页、点勾选）</p>
+        <div class="appwin" data-live>
+          <div class="appwin__bar">
+            <span class="appwin__mark" aria-hidden="true"></span>
+            <span class="appwin__name">PowerDock</span>
+            <span class="appwin__state"><b class="onCount">5</b> / 8 在组件 · 7 台在线</span>
+            <svg class="appwin__controls" aria-hidden="true"><use href="#ico-wincontrols"/></svg>
+          </div>
+          <div class="appwin__body">
+        <section class="pane is-on" data-pane="overview">
+          <!-- 第一层：结论。四个数回答「要不要充电 / 几台在线 / 组件里几台」 -->
+          <div class="ovband">
+            <div class="ovcell ovcell--alert">
+              <span class="ovcell__k">需充电 <b>1</b></span>
+              <span class="ovcell__v">18%</span>
+              <span class="ovcell__d">MX Master 3S · 2.4G</span>
+            </div>
+            <div class="ovcell">
+              <span class="ovcell__k">充电中</span>
+              <span class="ovcell__v">1</span>
+              <span class="ovcell__d">本机电池 47%</span>
+            </div>
+            <div class="ovcell">
+              <span class="ovcell__k">在线</span>
+              <span class="ovcell__v">7<small>/ 8</small></span>
+              <span class="ovcell__d">Watch S9 离线</span>
+            </div>
+            <div class="ovcell">
+              <span class="ovcell__k">在组件</span>
+              <span class="ovcell__v"><span class="onCount">5</span><small>/ 8</small></span>
+              <span class="ovcell__d">上限 7 台</span>
+            </div>
+          </div>
+
+          <!-- 第二层：焦点。一台要处理，两台要知道 -->
+          <div class="ovmid">
+            <div class="focus">
+              <p class="focus__k">最需要关注</p>
+              <div class="focus__num"><b>18</b><i>%</i></div>
+              <p class="focus__name">MX Master 3S</p>
+              <p class="focus__meta">2.4G HID · 12 秒前更新 · 低于 20% 阈值</p>
+              <div class="spark__head"><span>近 7 天</span><span>断连留空</span></div>
+              <div class="spark">
+                <div class="spark__col"><i style="height:96%"></i><span>日</span></div>
+                <div class="spark__col"><i style="height:84%"></i><span>一</span></div>
+                <div class="spark__col"><i style="height:71%"></i><span>二</span></div>
+                <div class="spark__col"><i class="gap"></i><span>三</span></div>
+                <div class="spark__col"><i style="height:44%"></i><span>四</span></div>
+                <div class="spark__col"><i class="warn" style="height:27%"></i><span>五</span></div>
+                <div class="spark__col is-today"><i class="danger" style="height:18%"></i><span>六</span></div>
+              </div>
+            </div>
+
+            <div class="odd">
+              <p class="odd__k">另外 2 台要注意</p>
+              <div class="oddrow">
+                <svg><use href="#ico-pc"/></svg>
+                <span class="oddrow__t">本机电池</span>
+                <span class="oddrow__s ok">充电中 47%</span>
+              </div>
+              <div class="oddrow">
+                <svg><use href="#ico-bt"/></svg>
+                <span class="oddrow__t">Watch S9</span>
+                <span class="oddrow__s">离线 · 6 分钟前</span>
+              </div>
+              <div class="oddrow">
+                <svg><use href="#ico-24g"/></svg>
+                <span class="oddrow__t">其余 5 台</span>
+                <span class="oddrow__s">正常 · 最低 55%</span>
+              </div>
+              <p class="odd__foot">全部 8 台见「设备」页</p>
+            </div>
+          </div>
+
+          <!-- 第三层：全貌。8 台排成一条，一台不漏 -->
+          <div class="strip">
+            <div class="strip__head">
+              <h3>全部设备 · 8 台</h3>
+              <p>点任一列进「设备」页</p>
+            </div>
+            <div class="strip__cols">
+              <div class="scol"><span class="scol__bar"><i class="danger" style="height:18%"></i></span><span class="scol__pct danger">18%</span><span class="scol__name">MX Master</span></div>
+              <div class="scol"><span class="scol__bar"><i class="ok" style="height:47%"></i></span><span class="scol__pct ok">47%</span><span class="scol__name">本机电池</span></div>
+              <div class="scol"><span class="scol__bar"><i style="height:55%"></i></span><span class="scol__pct">55%</span><span class="scol__name">相机</span></div>
+              <div class="scol"><span class="scol__bar"><i style="height:64%"></i></span><span class="scol__pct">64%</span><span class="scol__name">K380</span></div>
+              <div class="scol"><span class="scol__bar"><i style="height:71%"></i></span><span class="scol__pct">71%</span><span class="scol__name">Trackpad</span></div>
+              <div class="scol"><span class="scol__bar"><i style="height:82%"></i></span><span class="scol__pct">82%</span><span class="scol__name">AirPods</span></div>
+              <div class="scol"><span class="scol__bar"><i style="height:100%"></i></span><span class="scol__pct">100%</span><span class="scol__name">JBL GO 3</span></div>
+              <div class="scol"><span class="scol__bar"><i class="off" style="height:31%"></i></span><span class="scol__pct off">—</span><span class="scol__name">Watch S9</span></div>
+            </div>
+          </div>
+        </section>        <section class="pane" data-pane="devices">
+          <div class="vhead">
+            <h2>设备管理</h2>
+            <p>勾选 = 进组件 · 当前 <b class="onCount">5</b> 台</p>
+            <span class="search"><svg><use href="#ico-search"/></svg>搜索设备</span>
+          </div>
+          <div class="cardgrid"><article class="dcard" data-name="MX Master 3S" data-pct="18" data-tone="danger" data-ico="ico-24g"><button class="ck" aria-pressed="true"><svg><use href="#ico-check"/></svg></button><div class="dcard__top"><svg><use href="#ico-24g"/></svg><span class="dcard__name">MX Master 3S</span></div><p class="dcard__pct danger">18%</p><div class="dcard__bar"><i class="danger" style="width:18%"></i></div><p class="dcard__foot on">在组件中 · 2.4G HID</p></article><article class="dcard" data-name="本机电池" data-pct="47" data-tone="ok" data-ico="ico-pc"><button class="ck" aria-pressed="true"><svg><use href="#ico-check"/></svg></button><div class="dcard__top"><svg><use href="#ico-pc"/></svg><span class="dcard__name">本机电池</span></div><p class="dcard__pct ok">47%</p><div class="dcard__bar"><i class="ok" style="width:47%"></i></div><p class="dcard__foot on">在组件中 · 系统 WMI</p></article><article class="dcard" data-name="相机" data-pct="55" data-tone="" data-ico="ico-usb"><button class="ck" aria-pressed="true"><svg><use href="#ico-check"/></svg></button><div class="dcard__top"><svg><use href="#ico-usb"/></svg><span class="dcard__name">相机</span></div><p class="dcard__pct ">55%</p><div class="dcard__bar"><i class="" style="width:55%"></i></div><p class="dcard__foot on">在组件中 · USB HID</p></article><article class="dcard" data-name="K380 键盘" data-pct="64" data-tone="" data-ico="ico-bt"><button class="ck" aria-pressed="true"><svg><use href="#ico-check"/></svg></button><div class="dcard__top"><svg><use href="#ico-bt"/></svg><span class="dcard__name">K380 键盘</span></div><p class="dcard__pct ">64%</p><div class="dcard__bar"><i class="" style="width:64%"></i></div><p class="dcard__foot on">在组件中 · 蓝牙 GATT</p></article><article class="dcard" data-name="Magic Trackpad" data-pct="71" data-tone="" data-ico="ico-bt"><button class="ck" aria-pressed="false"><svg><use href="#ico-check"/></svg></button><div class="dcard__top"><svg><use href="#ico-bt"/></svg><span class="dcard__name">Magic Trackpad</span></div><p class="dcard__pct ">71%</p><div class="dcard__bar"><i class="" style="width:71%"></i></div><p class="dcard__foot">未显示 · 蓝牙 GATT</p></article><article class="dcard" data-name="AirPods Pro" data-pct="82" data-tone="" data-ico="ico-bt"><button class="ck" aria-pressed="true"><svg><use href="#ico-check"/></svg></button><div class="dcard__top"><svg><use href="#ico-bt"/></svg><span class="dcard__name">AirPods Pro</span></div><p class="dcard__pct ">82%</p><div class="dcard__bar"><i class="" style="width:82%"></i></div><p class="dcard__foot on">在组件中 · 蓝牙 GATT</p></article><article class="dcard" data-name="JBL GO 3" data-pct="100" data-tone="" data-ico="ico-bt"><button class="ck" aria-pressed="false"><svg><use href="#ico-check"/></svg></button><div class="dcard__top"><svg><use href="#ico-bt"/></svg><span class="dcard__name">JBL GO 3</span></div><p class="dcard__pct ">100%</p><div class="dcard__bar"><i class="" style="width:100%"></i></div><p class="dcard__foot">未显示 · 蓝牙 GATT</p></article><article class="dcard is-off" data-name="Watch S9" data-pct="0" data-tone="" data-ico="ico-bt"><button class="ck" aria-pressed="false"><svg><use href="#ico-check"/></svg></button><div class="dcard__top"><svg><use href="#ico-bt"/></svg><span class="dcard__name">Watch S9</span></div><p class="dcard__pct ">—</p><div class="dcard__bar"><i class="" style="width:31%"></i></div><p class="dcard__foot">离线 · 6 分钟前</p></article></div>
+          <div class="hintbar">
+            <svg><use href="#ico-battery"/></svg>
+            <span>勾选决定谁出现在桌面挂件里，<b>不影响</b>列表统计与低电量提醒。挂件最多 7 台，超出按电量从低到高截断。</span>
+          </div>
+          <div class="actbar">
+            <div class="actbar__who">
+              <svg><use href="#ico-24g"/></svg>
+              <input value="MX Master 3S" aria-label="设备别名">
+              <span class="src">2.4G HID · 18% · 12 秒前</span>
+            </div>
+            <div class="acts">
+              <button class="abtn">置顶</button>
+              <button class="abtn">忽略此设备</button>
+              <button class="abtn">查看日志</button>
+            </div>
+          </div>
+        </section>        <section class="pane" data-pane="widget">
+          <div class="vhead">
+            <h2>组件内容</h2>
+            <p>勾选即预览</p>
+            <span class="seg" id="sizeSeg" style="margin-left:auto">
+              <button data-size="sm">小 2×2</button>
+              <button class="is-on" data-size="md">中 4×2</button>
+              <button data-size="lg">大 4×4</button>
+            </span>
+          </div>
+          <div class="wgrid">
+            <ul class="picklist" id="pickList"><li class="pick" data-name="MX Master 3S" data-pct="18" data-tone="danger" data-ico="ico-24g" data-on="1"><button class="ck" aria-pressed="true"><svg><use href="#ico-check"/></svg></button><svg><use href="#ico-24g"/></svg><span class="pick__name">MX Master 3S</span><span class="pick__pct danger">18%</span></li><li class="pick" data-name="本机电池" data-pct="47" data-tone="ok" data-ico="ico-pc" data-on="1"><button class="ck" aria-pressed="true"><svg><use href="#ico-check"/></svg></button><svg><use href="#ico-pc"/></svg><span class="pick__name">本机电池</span><span class="pick__pct ok">47%</span></li><li class="pick" data-name="相机" data-pct="55" data-tone="" data-ico="ico-usb" data-on="1"><button class="ck" aria-pressed="true"><svg><use href="#ico-check"/></svg></button><svg><use href="#ico-usb"/></svg><span class="pick__name">相机</span><span class="pick__pct ">55%</span></li><li class="pick" data-name="K380 键盘" data-pct="64" data-tone="" data-ico="ico-bt" data-on="1"><button class="ck" aria-pressed="true"><svg><use href="#ico-check"/></svg></button><svg><use href="#ico-bt"/></svg><span class="pick__name">K380 键盘</span><span class="pick__pct ">64%</span></li><li class="pick" data-name="Magic Trackpad" data-pct="71" data-tone="" data-ico="ico-bt" data-on="0"><button class="ck" aria-pressed="false"><svg><use href="#ico-check"/></svg></button><svg><use href="#ico-bt"/></svg><span class="pick__name">Magic Trackpad</span><span class="pick__pct ">71%</span></li><li class="pick" data-name="AirPods Pro" data-pct="82" data-tone="" data-ico="ico-bt" data-on="1"><button class="ck" aria-pressed="true"><svg><use href="#ico-check"/></svg></button><svg><use href="#ico-bt"/></svg><span class="pick__name">AirPods Pro</span><span class="pick__pct ">82%</span></li><li class="pick" data-name="JBL GO 3" data-pct="100" data-tone="" data-ico="ico-bt" data-on="0"><button class="ck" aria-pressed="false"><svg><use href="#ico-check"/></svg></button><svg><use href="#ico-bt"/></svg><span class="pick__name">JBL GO 3</span><span class="pick__pct ">100%</span></li><li class="pick" data-name="Watch S9" data-pct="0" data-tone="" data-ico="ico-bt" data-on="0"><button class="ck" aria-pressed="false"><svg><use href="#ico-check"/></svg></button><svg><use href="#ico-bt"/></svg><span class="pick__name">Watch S9</span><span class="pick__pct ">—</span></li></ul>
+            <div class="preview">
+              <div class="stage">
+                <div class="stage__bar"><span>挂件预览</span><b>中 4×2 · 362×173</b></div>
+                <div class="wg" id="wg" style="width:362px">
+                  <div id="wgRows"><div class="wrow"><i class="danger"></i><span class="n">MX Master 3S</span><span class="b"><i class="danger" style="width:18%"></i></span><span class="p danger">18%</span></div><div class="wrow"><i class="ok"></i><span class="n">本机电池</span><span class="b"><i class="ok" style="width:47%"></i></span><span class="p ok">47%</span></div><div class="wrow"><i class=""></i><span class="n">相机</span><span class="b"><i class="" style="width:55%"></i></span><span class="p ">55%</span></div><div class="wrow"><i class=""></i><span class="n">K380 键盘</span><span class="b"><i class="" style="width:64%"></i></span><span class="p ">64%</span></div><div class="wrow"><i class=""></i><span class="n">AirPods Pro</span><span class="b"><i class="" style="width:82%"></i></span><span class="p ">82%</span></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="pick-foot">已选 <b class="onCount">5</b> / 8 · 挂件最多 7 台</p>
+        </section>        <section class="pane" data-pane="settings">
+          <div class="vhead"><h2>设置</h2><p>界面与行为</p></div>
+          <div class="setgrid">
+            <div class="panel">
+              <h3>界面</h3>
+              <div class="srow">
+                <div><div class="srow__t">外观</div><div class="srow__d">跟随系统时按 Windows 深浅色切换</div></div>
+                <div><span class="seg"><button class="is-on">深</button><button>浅</button><button>跟随</button></span></div>
+              </div>
+              <div class="srow">
+                <div><div class="srow__t">挂件尺寸</div><div class="srow__d">与「组件」页和 Dock 同一条</div></div>
+                <div><span class="seg"><button>小</button><button class="is-on">中</button><button>大</button></span></div>
+              </div>
+              <div class="srow">
+                <div><div class="srow__t">挂件置顶</div><div class="srow__d">不进 Alt+Tab、不抢焦点</div></div>
+                <button class="sw" aria-pressed="true"></button>
+              </div>
+            </div>
+            <div class="panel">
+              <h3>行为</h3>
+              <div class="srow">
+                <div><div class="srow__t">开机自启</div><div class="srow__d">写当前用户启动项，免管理员</div></div>
+                <button class="sw" aria-pressed="true"></button>
+              </div>
+              <div class="srow">
+                <div><div class="srow__t">关闭窗口时</div><div class="srow__d">托盘不可用时改为退出</div></div>
+                <div><span class="seg"><button class="is-on">托盘</button><button>退出</button></span></div>
+              </div>
+              <div class="srow">
+                <div><div class="srow__t">低电量阈值</div><div class="srow__d">30 分钟内同设备不重复提醒</div></div>
+                <div><span class="seg"><button class="is-on">20%</button></span></div>
+              </div>
+            </div>
+            <div class="panel">
+              <h3>组件</h3>
+              <div class="srow">
+                <div><div class="srow__t">每行显示</div><div class="srow__d">关掉某一列，挂件里整列让位</div></div>
+                <div class="swrow">
+                  <span>状态点</span><button class="sw" aria-pressed="true"></button>
+                  <span>电量条</span><button class="sw" aria-pressed="true"></button>
+                  <span>百分比</span><button class="sw" aria-pressed="true"></button>
+                </div>
+              </div>
+              <div class="srow">
+                <div><div class="srow__t">最多显示</div><div class="srow__d">超出按排序截断，不滚屏</div></div>
+                <div><span class="seg"><button>3</button><button class="is-on">5</button><button>7</button></span></div>
+              </div>
+            </div>
+            <div class="panel">
+              <h3>刷新与存储</h3>
+              <div class="srow">
+                <div><div class="srow__t">刷新策略</div><div class="srow__d">事件优先 · 充电 15s / 空闲 60s / 隐藏 5min</div></div>
+                <div><span class="seg"><button class="is-on">自动</button><button>手动</button></span></div>
+              </div>
+              <div class="srow">
+                <div><div class="srow__t">历史保留</div><div class="srow__d">history/*.jsonl · 5 分钟粒度 · 断连留空</div></div>
+                <div><span class="seg"><button class="is-on">7 天</button><button>30 天</button></span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+            <div class="dock"><button class="dock__btn is-on" data-go="overview" title="概览"><svg><use href="#ico-grid"/></svg></button><button class="dock__btn" data-go="devices" title="设备管理"><svg><use href="#ico-list"/></svg></button><button class="dock__btn" data-go="widget" title="组件"><svg><use href="#ico-widget"/></svg></button><span class="dock__sep"></span><button class="dock__btn" data-go="settings" title="设置"><svg><use href="#ico-sliders"/></svg></button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="theme-scope" data-theme="dark">
+        <p class="scope-label">深色 · 设备管理</p>
+        <div class="appwin">
+          <div class="appwin__bar">
+            <span class="appwin__mark" aria-hidden="true"></span>
+            <span class="appwin__name">PowerDock</span>
+            <span class="appwin__state"><b class="onCount">5</b> / 8 在组件 · 7 台在线</span>
+            <svg class="appwin__controls" aria-hidden="true"><use href="#ico-wincontrols"/></svg>
+          </div>
+          <div class="appwin__body">
+        <section class="pane is-on" data-pane="devices">
+          <div class="vhead">
+            <h2>设备管理</h2>
+            <p>勾选 = 进组件 · 当前 <b class="onCount">5</b> 台</p>
+            <span class="search"><svg><use href="#ico-search"/></svg>搜索设备</span>
+          </div>
+          <div class="cardgrid"><article class="dcard" data-name="MX Master 3S" data-pct="18" data-tone="danger" data-ico="ico-24g"><button class="ck" aria-pressed="true"><svg><use href="#ico-check"/></svg></button><div class="dcard__top"><svg><use href="#ico-24g"/></svg><span class="dcard__name">MX Master 3S</span></div><p class="dcard__pct danger">18%</p><div class="dcard__bar"><i class="danger" style="width:18%"></i></div><p class="dcard__foot on">在组件中 · 2.4G HID</p></article><article class="dcard" data-name="本机电池" data-pct="47" data-tone="ok" data-ico="ico-pc"><button class="ck" aria-pressed="true"><svg><use href="#ico-check"/></svg></button><div class="dcard__top"><svg><use href="#ico-pc"/></svg><span class="dcard__name">本机电池</span></div><p class="dcard__pct ok">47%</p><div class="dcard__bar"><i class="ok" style="width:47%"></i></div><p class="dcard__foot on">在组件中 · 系统 WMI</p></article><article class="dcard" data-name="相机" data-pct="55" data-tone="" data-ico="ico-usb"><button class="ck" aria-pressed="true"><svg><use href="#ico-check"/></svg></button><div class="dcard__top"><svg><use href="#ico-usb"/></svg><span class="dcard__name">相机</span></div><p class="dcard__pct ">55%</p><div class="dcard__bar"><i class="" style="width:55%"></i></div><p class="dcard__foot on">在组件中 · USB HID</p></article><article class="dcard" data-name="K380 键盘" data-pct="64" data-tone="" data-ico="ico-bt"><button class="ck" aria-pressed="true"><svg><use href="#ico-check"/></svg></button><div class="dcard__top"><svg><use href="#ico-bt"/></svg><span class="dcard__name">K380 键盘</span></div><p class="dcard__pct ">64%</p><div class="dcard__bar"><i class="" style="width:64%"></i></div><p class="dcard__foot on">在组件中 · 蓝牙 GATT</p></article><article class="dcard" data-name="Magic Trackpad" data-pct="71" data-tone="" data-ico="ico-bt"><button class="ck" aria-pressed="false"><svg><use href="#ico-check"/></svg></button><div class="dcard__top"><svg><use href="#ico-bt"/></svg><span class="dcard__name">Magic Trackpad</span></div><p class="dcard__pct ">71%</p><div class="dcard__bar"><i class="" style="width:71%"></i></div><p class="dcard__foot">未显示 · 蓝牙 GATT</p></article><article class="dcard" data-name="AirPods Pro" data-pct="82" data-tone="" data-ico="ico-bt"><button class="ck" aria-pressed="true"><svg><use href="#ico-check"/></svg></button><div class="dcard__top"><svg><use href="#ico-bt"/></svg><span class="dcard__name">AirPods Pro</span></div><p class="dcard__pct ">82%</p><div class="dcard__bar"><i class="" style="width:82%"></i></div><p class="dcard__foot on">在组件中 · 蓝牙 GATT</p></article><article class="dcard" data-name="JBL GO 3" data-pct="100" data-tone="" data-ico="ico-bt"><button class="ck" aria-pressed="false"><svg><use href="#ico-check"/></svg></button><div class="dcard__top"><svg><use href="#ico-bt"/></svg><span class="dcard__name">JBL GO 3</span></div><p class="dcard__pct ">100%</p><div class="dcard__bar"><i class="" style="width:100%"></i></div><p class="dcard__foot">未显示 · 蓝牙 GATT</p></article><article class="dcard is-off" data-name="Watch S9" data-pct="0" data-tone="" data-ico="ico-bt"><button class="ck" aria-pressed="false"><svg><use href="#ico-check"/></svg></button><div class="dcard__top"><svg><use href="#ico-bt"/></svg><span class="dcard__name">Watch S9</span></div><p class="dcard__pct ">—</p><div class="dcard__bar"><i class="" style="width:31%"></i></div><p class="dcard__foot">离线 · 6 分钟前</p></article></div>
+          <div class="hintbar">
+            <svg><use href="#ico-battery"/></svg>
+            <span>勾选决定谁出现在桌面挂件里，<b>不影响</b>列表统计与低电量提醒。挂件最多 7 台，超出按电量从低到高截断。</span>
+          </div>
+          <div class="actbar">
+            <div class="actbar__who">
+              <svg><use href="#ico-24g"/></svg>
+              <input value="MX Master 3S" aria-label="设备别名">
+              <span class="src">2.4G HID · 18% · 12 秒前</span>
+            </div>
+            <div class="acts">
+              <button class="abtn">置顶</button>
+              <button class="abtn">忽略此设备</button>
+              <button class="abtn">查看日志</button>
+            </div>
+          </div>
+        </section>
+            <div class="dock"><button class="dock__btn" data-go="overview" title="概览"><svg><use href="#ico-grid"/></svg></button><button class="dock__btn is-on" data-go="devices" title="设备管理"><svg><use href="#ico-list"/></svg></button><button class="dock__btn" data-go="widget" title="组件"><svg><use href="#ico-widget"/></svg></button><span class="dock__sep"></span><button class="dock__btn" data-go="settings" title="设置"><svg><use href="#ico-sliders"/></svg></button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="theme-scope" data-theme="light">
+        <p class="scope-label">浅色 · 概览</p>
+        <div class="appwin">
+          <div class="appwin__bar">
+            <span class="appwin__mark" aria-hidden="true"></span>
+            <span class="appwin__name">PowerDock</span>
+            <span class="appwin__state"><b class="onCount">5</b> / 8 在组件 · 7 台在线</span>
+            <svg class="appwin__controls" aria-hidden="true"><use href="#ico-wincontrols"/></svg>
+          </div>
+          <div class="appwin__body">
+        <section class="pane is-on" data-pane="overview">
+          <!-- 第一层：结论。四个数回答「要不要充电 / 几台在线 / 组件里几台」 -->
+          <div class="ovband">
+            <div class="ovcell ovcell--alert">
+              <span class="ovcell__k">需充电 <b>1</b></span>
+              <span class="ovcell__v">18%</span>
+              <span class="ovcell__d">MX Master 3S · 2.4G</span>
+            </div>
+            <div class="ovcell">
+              <span class="ovcell__k">充电中</span>
+              <span class="ovcell__v">1</span>
+              <span class="ovcell__d">本机电池 47%</span>
+            </div>
+            <div class="ovcell">
+              <span class="ovcell__k">在线</span>
+              <span class="ovcell__v">7<small>/ 8</small></span>
+              <span class="ovcell__d">Watch S9 离线</span>
+            </div>
+            <div class="ovcell">
+              <span class="ovcell__k">在组件</span>
+              <span class="ovcell__v"><span class="onCount">5</span><small>/ 8</small></span>
+              <span class="ovcell__d">上限 7 台</span>
+            </div>
+          </div>
+
+          <!-- 第二层：焦点。一台要处理，两台要知道 -->
+          <div class="ovmid">
+            <div class="focus">
+              <p class="focus__k">最需要关注</p>
+              <div class="focus__num"><b>18</b><i>%</i></div>
+              <p class="focus__name">MX Master 3S</p>
+              <p class="focus__meta">2.4G HID · 12 秒前更新 · 低于 20% 阈值</p>
+              <div class="spark__head"><span>近 7 天</span><span>断连留空</span></div>
+              <div class="spark">
+                <div class="spark__col"><i style="height:96%"></i><span>日</span></div>
+                <div class="spark__col"><i style="height:84%"></i><span>一</span></div>
+                <div class="spark__col"><i style="height:71%"></i><span>二</span></div>
+                <div class="spark__col"><i class="gap"></i><span>三</span></div>
+                <div class="spark__col"><i style="height:44%"></i><span>四</span></div>
+                <div class="spark__col"><i class="warn" style="height:27%"></i><span>五</span></div>
+                <div class="spark__col is-today"><i class="danger" style="height:18%"></i><span>六</span></div>
+              </div>
+            </div>
+
+            <div class="odd">
+              <p class="odd__k">另外 2 台要注意</p>
+              <div class="oddrow">
+                <svg><use href="#ico-pc"/></svg>
+                <span class="oddrow__t">本机电池</span>
+                <span class="oddrow__s ok">充电中 47%</span>
+              </div>
+              <div class="oddrow">
+                <svg><use href="#ico-bt"/></svg>
+                <span class="oddrow__t">Watch S9</span>
+                <span class="oddrow__s">离线 · 6 分钟前</span>
+              </div>
+              <div class="oddrow">
+                <svg><use href="#ico-24g"/></svg>
+                <span class="oddrow__t">其余 5 台</span>
+                <span class="oddrow__s">正常 · 最低 55%</span>
+              </div>
+              <p class="odd__foot">全部 8 台见「设备」页</p>
+            </div>
+          </div>
+
+          <!-- 第三层：全貌。8 台排成一条，一台不漏 -->
+          <div class="strip">
+            <div class="strip__head">
+              <h3>全部设备 · 8 台</h3>
+              <p>点任一列进「设备」页</p>
+            </div>
+            <div class="strip__cols">
+              <div class="scol"><span class="scol__bar"><i class="danger" style="height:18%"></i></span><span class="scol__pct danger">18%</span><span class="scol__name">MX Master</span></div>
+              <div class="scol"><span class="scol__bar"><i class="ok" style="height:47%"></i></span><span class="scol__pct ok">47%</span><span class="scol__name">本机电池</span></div>
+              <div class="scol"><span class="scol__bar"><i style="height:55%"></i></span><span class="scol__pct">55%</span><span class="scol__name">相机</span></div>
+              <div class="scol"><span class="scol__bar"><i style="height:64%"></i></span><span class="scol__pct">64%</span><span class="scol__name">K380</span></div>
+              <div class="scol"><span class="scol__bar"><i style="height:71%"></i></span><span class="scol__pct">71%</span><span class="scol__name">Trackpad</span></div>
+              <div class="scol"><span class="scol__bar"><i style="height:82%"></i></span><span class="scol__pct">82%</span><span class="scol__name">AirPods</span></div>
+              <div class="scol"><span class="scol__bar"><i style="height:100%"></i></span><span class="scol__pct">100%</span><span class="scol__name">JBL GO 3</span></div>
+              <div class="scol"><span class="scol__bar"><i class="off" style="height:31%"></i></span><span class="scol__pct off">—</span><span class="scol__name">Watch S9</span></div>
+            </div>
+          </div>
+        </section>
+            <div class="dock"><button class="dock__btn is-on" data-go="overview" title="概览"><svg><use href="#ico-grid"/></svg></button><button class="dock__btn" data-go="devices" title="设备管理"><svg><use href="#ico-list"/></svg></button><button class="dock__btn" data-go="widget" title="组件"><svg><use href="#ico-widget"/></svg></button><span class="dock__sep"></span><button class="dock__btn" data-go="settings" title="设置"><svg><use href="#ico-sliders"/></svg></button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="rule-table">
+      <h3>深色 → 浅色 换算规则</h3>
+      <table>
+        <thead>
+          <tr><th scope="col">项</th><th scope="col">深色</th><th scope="col">浅色</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>表面</td><td>黑 84% + 模糊 60</td><td>白 86% + 模糊 60</td></tr>
+          <tr><td>层次叠加</td><td>白 3.5% – 14%（抬起）</td><td>墨 3.5% – 10%（压下）</td></tr>
+          <tr><td>正文</td><td>白 40% – 92%</td><td>墨 32% – 92%</td></tr>
+          <tr><td>品牌色</td><td>#6BA6FF</td><td>#2F6FE0</td></tr>
+          <tr><td>状态色 · 在线 / 充电</td><td>#34D399</td><td>#12A870</td></tr>
+          <tr><td>状态色 · 偏低</td><td>#FF9F0A</td><td>#C25E00</td></tr>
+          <tr><td>状态色 · 告急</td><td>#FF6B6B</td><td>#C0342B</td></tr>
+          <tr><td>描边</td><td>白 14%</td><td>墨 10%</td></tr>
+        </tbody>
+      </table>
+      <p class="rule-table__note">
+        浅色版不透明度锁在 0.86 是刻意的地板值：Windows 壁纸不可控，低不透明度会被深色或高饱和壁纸染成灰紫。
+        另外：品牌色只用于交互与选中（筛选、链接、选中行左侧竖条），<b>不再用于表达电量高低</b>——
+        上一版把「最低电量」画成品牌蓝，和托盘电量环的红 / 琥珀告警是两套语言。
+      </p>
+      <h3>电量阈值（与托盘电量环共用一套判据）</h3>
+      <table>
+        <thead>
+          <tr><th scope="col">区间</th><th scope="col">含义</th><th scope="col">表现</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>&lt; 20%</td><td>需充电</td><td>百分比与条用告急色，触发低电量通知（默认 20%，30 分钟内不重复）</td></tr>
+          <tr><td>20% – 40%</td><td>偏低</td><td>百分比与条用偏低色，不通知</td></tr>
+          <tr><td>40% 以上</td><td>正常</td><td>条用中性填充，百分比用一级文字色</td></tr>
+          <tr><td>充电中</td><td>—</td><td>绿色 + 闪电图标，<b>覆盖</b>上面三档：正在充电的设备不该被标成告急</td></tr>
+          <tr><td>未知</td><td>数据源不可用</td><td>空心状态环，电量位显示「—」，不按趋势外推</td></tr>
+        </tbody>
+      </table>
+      <p class="rule-table__note">
+        阈值写死在这里，是为了让列表、挂件、托盘三处用同一套判据。改阈值要三处一起改。
+      </p>
+    </div>
+  </section>
+
+  <!-- ═════════ 03 连接状态 ═════════ -->
+  <section class="section" id="status">
+    <header class="section__head">
+      <p class="eyebrow">03 · CONNECTION STATE</p>
+      <h2>在线 / 离线</h2>
+      <p class="section__sub">
+        状态点落在行首，4 / 5 / 6 px。在线绿、离线灰；离线行整体降到 50%，并把电量改为「—」——
+        旧读数不可信，不能当数据展示。
+      </p>
+    </header>
+
+    <div class="status-grid">
+      <div class="status-col">
+        <p class="scope-label">状态三态 · STATE</p>
+        <article class="state-card" data-state="online">
+          <span class="state-card__dot"></span>
+          <div>
+            <h3>在线 <span>ONLINE</span></h3>
+            <p>已连接，且读数在有效期内。正常渲染，不做任何弱化。</p>
+          </div>
+        </article>
+        <article class="state-card" data-state="offline">
+          <span class="state-card__dot"></span>
+          <div>
+            <h3>离线 <span>OFFLINE</span></h3>
+            <p>整行 50%，电量位显示「—」。恢复后不重排，位置不变。</p>
+          </div>
+        </article>
+        <article class="state-card" data-state="unknown">
+          <span class="state-card__dot"></span>
+          <div>
+            <h3>未知 <span>UNKNOWN</span></h3>
+            <p>启动首帧或数据源不可用。空心环，不用灰色实心 —— 它不是离线。</p>
+          </div>
+        </article>
+
+        <p class="scope-label">行内落位 · IN ROW</p>
+        <ul class="wlist wlist--demo">
+          <li class="dev" data-state="online">
+            <span class="dev__dot"></span>
+            <svg class="dev__ico" aria-hidden="true"><use href="#ico-24g"/></svg>
+            <span class="dev__name">MX Master 3S</span>
+            <span class="dev__bar"><i style="--pct:23%"></i></span>
+            <span class="dev__pct">23%</span>
+          </li>
+          <li class="dev" data-state="offline">
+            <span class="dev__dot"></span>
+            <svg class="dev__ico" aria-hidden="true"><use href="#ico-usb"/></svg>
+            <span class="dev__name">触控笔</span>
+            <span class="dev__bar"><i style="--pct:91%"></i></span>
+            <span class="dev__pct">—</span>
+          </li>
+        </ul>
+        <p class="note">
+          为什么点放行首、不做整行变色：链路图标已表达「无线 / 有线」，再上色会与电量条的品牌蓝打架；
+          整行填充成绿或灰，会让等权重布局出现新的视觉主角。一个 5px 的点是唯一不改变既有层级的加法。
+        </p>
+      </div>
+
+      <div class="status-col">
+        <p class="scope-label">状态来源 · SOURCE</p>
+        <table class="src-table">
+          <thead>
+            <tr><th scope="col">链路</th><th scope="col">判据</th><th scope="col">延迟</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>蓝牙</td>
+              <td>ConnectionStatus + GATT 读失败计数</td>
+              <td class="src-table__fast">即时</td>
+            </tr>
+            <tr>
+              <td>2.4G</td>
+              <td>接收器 HID 心跳，连续 3 次超时</td>
+              <td class="src-table__slow">45–60s</td>
+            </tr>
+            <tr>
+              <td>USB</td>
+              <td>PnP 设备在场 + 句柄仍有效</td>
+              <td class="src-table__fast">即时</td>
+            </tr>
+            <tr>
+              <td>本机</td>
+              <td>WMI BatteryStatus，无电池则不列入</td>
+              <td>60s</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p class="scope-label">更新策略 · REFRESH</p>
+        <ol class="steps">
+          <li><b>① 事件优先</b><span>蓝牙 / USB 的连接变化走系统事件，不等轮询，几百毫秒内到位。</span></li>
+          <li><b>② 心跳兜底</b><span>2.4G 接收器没有系统事件，靠应用内 15s 一次 HID 读取探活。</span></li>
+          <li><b>③ 可见才跑</b><span>挂件被遮挡或最小化时暂停采集，重新可见时立刻补一次。</span></li>
+          <li><b>④ 300ms 合并</b><span>蓝牙抖动期内的多次状态变更合并成一次渲染，避免反复闪。</span></li>
+        </ol>
+
+        <pre class="code"><code>online = now - lastEvent &lt; 90s
+      &amp;&amp; now - lastRead  &lt; 90s
+
+// 两个条件缺一不可：系统说连着、
+// 但读数停滞，就是僵尸连接，按离线处理。</code></pre>
+      </div>
+
+      <div class="status-col">
+        <p class="scope-label">切换效果 · TRANSITION</p>
+        <ol class="timeline">
+          <li><b>0 ms</b><span>收到 Disconnected 事件，立即锁定该行，不让它继续参与排序。</span></li>
+          <li><b>150 ms</b><span>状态点交叉淡化：绿 → 灰，同位置换色，不缩放。</span></li>
+          <li><b>280 ms</b><span>百分比淡出、横线淡入，各 120ms，中间留 40ms 空窗避免字符叠影。</span></li>
+          <li><b>300 ms</b><span>整行落到 50%，稳态。行高不变，列表不重排。</span></li>
+        </ol>
+        <p class="note">
+          反向恢复时故意错开：先恢复行不透明（120ms），再让点变绿（再 200ms）。
+          同时做会像「弹回来」，抢走对其它行的注意力。
+        </p>
+
+        <p class="scope-label">异常处理 · EDGE CASES</p>
+        <dl class="edge">
+          <div><dt>已配对未连接（合盖 / 超距）</dt><dd>判离线。悬停可看「最后 64% · 12 分钟前」，不把旧值当当前值。</dd></div>
+          <div><dt>无蓝牙适配器 / 服务未启动</dt><dd>空心环，不判离线。功能不可用 ≠ 设备掉线。</dd></div>
+          <div><dt>僵尸连接（报连上但读数停滞）</dt><dd>90s 无更新即判离线。宁可少显示，也不显示一个不会变的数字。</dd></div>
+          <div><dt>全部离线</dt><dd>页眉显示 0/N，组件整体 65%。不弹错误、不显示空状态插图。</dd></div>
+          <div><dt>采集异常（读取失败但设备在）</dt><dd>重试 3 次仍失败降为未知态，保留上一次已知电量，不清零。</dd></div>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═════════ 04 图标与托盘 ═════════ -->
+  <section class="section" id="icons">
+    <header class="section__head">
+      <p class="eyebrow">04 · APP ICON &amp; TRAY</p>
+      <h2>图标里是满格，托盘里是实况</h2>
+      <p class="section__sub">
+        一个壳里三个电芯 = 多台设备聚合成一个读数，格数就是档位。同一个形状，两种语义：
+        图标表示身份，托盘表示状态。
+      </p>
+    </header>
+
+    <div class="icon-grid">
+      <div class="icon-block">
+        <p class="scope-label">应用图标 · APP ICON</p>
+        <div class="appicon appicon--256">
+          <svg viewBox="0 0 256 256" aria-hidden="true"><use href="#ico-battery"/></svg>
+        </div>
+        <div class="appicon-row">
+          <div class="appicon appicon--64"><svg viewBox="0 0 256 256" aria-hidden="true"><use href="#ico-battery"/></svg></div>
+          <div class="appicon appicon--32"><svg viewBox="0 0 256 256" aria-hidden="true"><use href="#ico-battery"/></svg></div>
+          <div class="appicon appicon--16"><svg viewBox="0 0 256 256" aria-hidden="true"><use href="#ico-battery"/></svg></div>
+        </div>
+        <p class="note">
+          按尺寸换描边档：256 / 64 用 11，32 用 14 并把三格合并，16 用 24 加粗。
+          缩小不是等比缩放，是补偿亚像素损失。
+        </p>
+      </div>
+
+      <div class="icon-block">
+        <p class="scope-label">托盘图标 · 深色任务栏</p>
+        <div class="taskbar taskbar--dark">
+          <span class="trayicon" data-tray="normal" aria-label="正常 64%"><svg viewBox="0 0 24 24"><use href="#tray-normal"/></svg></span>
+          <span class="trayicon" data-tray="mid" aria-label="中等 34%"><svg viewBox="0 0 24 24"><use href="#tray-mid"/></svg></span>
+          <span class="trayicon" data-tray="low" aria-label="低电 19%"><svg viewBox="0 0 24 24"><use href="#tray-low"/></svg></span>
+          <span class="trayicon" data-tray="charging" aria-label="充电中"><svg viewBox="0 0 24 24"><use href="#tray-normal"/></svg></span>
+        </div>
+
+        <p class="scope-label">托盘图标 · 浅色任务栏</p>
+        <div class="taskbar taskbar--light">
+          <span class="trayicon" data-tray="normal" aria-label="正常 64%"><svg viewBox="0 0 24 24"><use href="#tray-normal"/></svg></span>
+          <span class="trayicon" data-tray="mid" aria-label="中等 34%"><svg viewBox="0 0 24 24"><use href="#tray-mid"/></svg></span>
+          <span class="trayicon" data-tray="low" aria-label="低电 19%"><svg viewBox="0 0 24 24"><use href="#tray-low"/></svg></span>
+          <span class="trayicon" data-tray="charging" aria-label="充电中"><svg viewBox="0 0 24 24"><use href="#tray-normal"/></svg></span>
+        </div>
+        <p class="note">
+          左 → 右：正常 ≥50% · 中 20–49% · 低 &lt;20% · 充电中。
+          绿色只表示「正在充」，不表示满；浅色任务栏整枚反色并降明度。
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═════════ 05 链路图标 ═════════ -->
+  <section class="section" id="transports">
+    <header class="section__head">
+      <p class="eyebrow">05 · TRANSPORT ICONS</p>
+      <h2>12 × 12 网格的四枚链路图标</h2>
+      <p class="section__sub">
+        组件里按 13px 落在名称前。描边基准 1.3，小尺寸反而加粗到 1.5–1.8 ——
+        不是等比缩小，是补偿亚像素损失。
+      </p>
+    </header>
+
+    <div class="transport-grid">
+      <figure class="transport">
+        <svg class="transport__big" viewBox="0 0 12 12" aria-hidden="true"><use href="#ico-bt"/></svg>
+        <figcaption>
+          <b>蓝牙 · BT</b>
+          <span>只画符文，不加外圆。12px 下圆会把笔画吃掉一半，变成一团灰点。</span>
+        </figcaption>
+        <div class="transport__sizes">
+          <svg viewBox="0 0 12 12" aria-hidden="true"><use href="#ico-bt"/></svg>
+          <svg viewBox="0 0 12 12" aria-hidden="true"><use href="#ico-bt"/></svg>
+        </div>
+      </figure>
+
+      <figure class="transport">
+        <svg class="transport__big" viewBox="0 0 12 12" aria-hidden="true"><use href="#ico-usb"/></svg>
+        <figcaption>
+          <b>USB</b>
+          <span>三叉砍成「主干 + 上箭头 + 单侧分支带点」。第二根分支在 13px 会糊死。</span>
+        </figcaption>
+        <div class="transport__sizes">
+          <svg viewBox="0 0 12 12" aria-hidden="true"><use href="#ico-usb"/></svg>
+          <svg viewBox="0 0 12 12" aria-hidden="true"><use href="#ico-usb"/></svg>
+        </div>
+      </figure>
+
+      <figure class="transport">
+        <svg class="transport__big" viewBox="0 0 12 12" aria-hidden="true"><use href="#ico-24g"/></svg>
+        <figcaption>
+          <b>2.4G 无线</b>
+          <span>实心点 + 两道同心弧向右扩散。弧天然右重，圆心左移到 x=3.8 校正重心。</span>
+        </figcaption>
+        <div class="transport__sizes">
+          <svg viewBox="0 0 12 12" aria-hidden="true"><use href="#ico-24g"/></svg>
+          <svg viewBox="0 0 12 12" aria-hidden="true"><use href="#ico-24g"/></svg>
+        </div>
+      </figure>
+
+      <figure class="transport">
+        <svg class="transport__big" viewBox="0 0 12 12" aria-hidden="true"><use href="#ico-pc"/></svg>
+        <figcaption>
+          <b>本机 · PC</b>
+          <span>笔记本：屏幕矩形 + 更宽的底座横线。不用台式 —— 台式机没有电池。</span>
+        </figcaption>
+        <div class="transport__sizes">
+          <svg viewBox="0 0 12 12" aria-hidden="true"><use href="#ico-pc"/></svg>
+          <svg viewBox="0 0 12 12" aria-hidden="true"><use href="#ico-pc"/></svg>
+        </div>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ═════════ 06 配置页 ═════════ -->
+  <section class="section" id="config">
+    <header class="section__head">
+      <p class="eyebrow">06 · WIDGET CONFIG</p>
+      <h2>勾选决定谁进组件</h2>
+      <p class="section__sub">
+        长按组件 → 编辑小组件。勾选数量决定每一档尺寸能显示几行；未勾选 ≠ 离线，两者是独立维度。
+        <b>注</b>：同一组勾选现在也内建在主窗口「设备管理」页（见 02），本节保留为独立配置入口的形态记录，
+        两处的勾选状态是同一份。
+      </p>
+    </header>
+
+    <div class="sheet-stage">
+      <div class="sheet">
+        <span class="sheet__grip" aria-hidden="true"></span>
+        <header class="sheet__head">
+          <h3>编辑小组件</h3>
+          <button class="sheet__done" type="button">完成</button>
+        </header>
+        <p class="sheet__sub">POWERDOCK · 中号 · 按电量升序</p>
+        <hr class="sheet__hr">
+
+        <div class="sheet__group">
+          <span>显示设备</span>
+          <span class="sheet__count" id="pickedCount">已选 6 / 8</span>
+        </div>
+        <ul class="picks" id="picks">
+          <li class="pick" data-state="online">
+            <button class="pick__check" type="button" aria-pressed="true" aria-label="选择 MX Master 3S"></button>
+            <svg class="pick__ico" aria-hidden="true"><use href="#ico-24g"/></svg>
+            <span class="pick__name">MX Master 3S</span>
+            <span class="pick__pct">23%</span>
+          </li>
+          <li class="pick" data-state="online">
+            <button class="pick__check" type="button" aria-pressed="true" aria-label="选择 本机电池"></button>
+            <svg class="pick__ico" aria-hidden="true"><use href="#ico-pc"/></svg>
+            <span class="pick__name">本机电池</span>
+            <span class="pick__pct">47%</span>
+          </li>
+          <li class="pick" data-state="online">
+            <button class="pick__check" type="button" aria-pressed="true" aria-label="选择 相机"></button>
+            <svg class="pick__ico" aria-hidden="true"><use href="#ico-usb"/></svg>
+            <span class="pick__name">相机</span>
+            <span class="pick__pct">55%</span>
+          </li>
+          <li class="pick" data-state="online">
+            <button class="pick__check" type="button" aria-pressed="true" aria-label="选择 K380 键盘"></button>
+            <svg class="pick__ico" aria-hidden="true"><use href="#ico-bt"/></svg>
+            <span class="pick__name">K380 键盘</span>
+            <span class="pick__pct">64%</span>
+          </li>
+          <li class="pick" data-state="online">
+            <button class="pick__check" type="button" aria-pressed="true" aria-label="选择 Watch S9"></button>
+            <svg class="pick__ico" aria-hidden="true"><use href="#ico-bt"/></svg>
+            <span class="pick__name">Watch S9</span>
+            <span class="pick__pct">68%</span>
+          </li>
+          <li class="pick" data-state="online">
+            <button class="pick__check" type="button" aria-pressed="true" aria-label="选择 MX Keys 键盘"></button>
+            <svg class="pick__ico" aria-hidden="true"><use href="#ico-bt"/></svg>
+            <span class="pick__name">MX Keys 键盘</span>
+            <span class="pick__pct">78%</span>
+          </li>
+          <li class="pick" data-state="online">
+            <button class="pick__check" type="button" aria-pressed="false" aria-label="选择 AirPods Pro"></button>
+            <svg class="pick__ico" aria-hidden="true"><use href="#ico-bt"/></svg>
+            <span class="pick__name">AirPods Pro</span>
+            <span class="pick__pct">82%</span>
+          </li>
+          <li class="pick" data-state="online">
+            <button class="pick__check" type="button" aria-pressed="false" aria-label="选择 触控笔"></button>
+            <svg class="pick__ico" aria-hidden="true"><use href="#ico-usb"/></svg>
+            <span class="pick__name">触控笔</span>
+            <span class="pick__pct">91%</span>
+          </li>
+        </ul>
+
+        <hr class="sheet__hr">
+        <p class="sheet__group">排序方式</p>
+        <div class="seg seg--wide" role="group" aria-label="排序方式">
+          <button class="seg__btn is-active" type="button">按电量升序</button>
+          <button class="seg__btn" type="button">手动拖拽</button>
+        </div>
+
+        <p class="sheet__group">显示内容</p>
+        <div class="seg seg--wide" role="group" aria-label="显示内容">
+          <button class="seg__btn is-active" type="button">名称 + 电量</button>
+          <button class="seg__btn" type="button">仅电量</button>
+        </div>
+
+        <p class="sheet__foot">
+          未勾选 ≠ 离线：勾选决定是否进组件，状态点表达当前是否连得上，两者独立。<br>
+          勾选数 &gt; 单档容量时按当前排序截断，不做分页。
+        </p>
+      </div>
+
+      <aside class="sheet-side">
+        <h3>这块面板的四条规则</h3>
+        <ol class="rulelist">
+          <li>勾选即入组件，取消即刻移除，无二次确认 —— 组件改动是可逆的。</li>
+          <li>勾选数量决定密度：≤3 台时大号自动放大行高；5 台是中号上限，7 台是大号上限。</li>
+          <li>排序与显示内容是两个独立维度，互不联动；手动模式下列表可直接拖拽。</li>
+          <li>改动在点「完成」前不落盘，写入 <code>settings.json</code>。</li>
+        </ol>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ═════════ 07 桌面场景 ═════════ -->
+  <section class="section" id="desktop">
+    <header class="section__head">
+      <p class="eyebrow">07 · DESKTOP SCENE</p>
+      <h2>落在 Windows 桌面上</h2>
+      <p class="section__sub">
+        无边框透明窗口（WS_EX_TOOLWINDOW | NOACTIVATE），可拖动、右键出菜单、不占 Alt+Tab。
+        材质跟随系统主题，否则深色桌面上会贴一块白板。
+      </p>
+    </header>
+
+    <figure class="desk">
+      <div class="desk__wall"></div>
+      <div class="desk__stage">
+        <div class="theme-scope theme-scope--float" data-theme="dark">
+          <article class="widget widget--md" aria-label="桌面挂件，深色">
+            <ul class="wlist">
+              <li class="dev" data-state="online">
+                <span class="dev__dot"></span>
+                <svg class="dev__ico" aria-hidden="true"><use href="#ico-24g"/></svg>
+                <span class="dev__name">MX Master 3S</span>
+                <span class="dev__bar"><i style="--pct:23%"></i></span>
+                <span class="dev__pct">23%</span>
+              </li>
+              <li class="dev" data-state="online">
+                <span class="dev__dot"></span>
+                <svg class="dev__ico" aria-hidden="true"><use href="#ico-pc"/></svg>
+                <span class="dev__name">本机电池</span>
+                <span class="dev__bar"><i style="--pct:47%"></i></span>
+                <span class="dev__pct">47%</span>
+              </li>
+              <li class="dev" data-state="online">
+                <span class="dev__dot"></span>
+                <svg class="dev__ico" aria-hidden="true"><use href="#ico-usb"/></svg>
+                <span class="dev__name">相机</span>
+                <span class="dev__bar"><i style="--pct:55%"></i></span>
+                <span class="dev__pct">55%</span>
+              </li>
+              <li class="dev" data-state="online">
+                <span class="dev__dot"></span>
+                <svg class="dev__ico" aria-hidden="true"><use href="#ico-bt"/></svg>
+                <span class="dev__name">K380 键盘</span>
+                <span class="dev__bar"><i style="--pct:64%"></i></span>
+                <span class="dev__pct">64%</span>
+              </li>
+              <li class="dev" data-state="offline">
+                <span class="dev__dot"></span>
+                <svg class="dev__ico" aria-hidden="true"><use href="#ico-bt"/></svg>
+                <span class="dev__name">Watch S9</span>
+                <span class="dev__bar"><i style="--pct:68%"></i></span>
+                <span class="dev__pct">—</span>
+              </li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="theme-scope theme-scope--float" data-theme="light">
+          <article class="widget widget--md" aria-label="桌面挂件，浅色">
+            <ul class="wlist">
+              <li class="dev" data-state="online">
+                <span class="dev__dot"></span>
+                <svg class="dev__ico" aria-hidden="true"><use href="#ico-24g"/></svg>
+                <span class="dev__name">MX Master 3S</span>
+                <span class="dev__bar"><i style="--pct:23%"></i></span>
+                <span class="dev__pct">23%</span>
+              </li>
+              <li class="dev" data-state="online">
+                <span class="dev__dot"></span>
+                <svg class="dev__ico" aria-hidden="true"><use href="#ico-pc"/></svg>
+                <span class="dev__name">本机电池</span>
+                <span class="dev__bar"><i style="--pct:47%"></i></span>
+                <span class="dev__pct">47%</span>
+              </li>
+              <li class="dev" data-state="online">
+                <span class="dev__dot"></span>
+                <svg class="dev__ico" aria-hidden="true"><use href="#ico-usb"/></svg>
+                <span class="dev__name">相机</span>
+                <span class="dev__bar"><i style="--pct:55%"></i></span>
+                <span class="dev__pct">55%</span>
+              </li>
+              <li class="dev" data-state="online">
+                <span class="dev__dot"></span>
+                <svg class="dev__ico" aria-hidden="true"><use href="#ico-bt"/></svg>
+                <span class="dev__name">K380 键盘</span>
+                <span class="dev__bar"><i style="--pct:64%"></i></span>
+                <span class="dev__pct">64%</span>
+              </li>
+              <li class="dev" data-state="offline">
+                <span class="dev__dot"></span>
+                <svg class="dev__ico" aria-hidden="true"><use href="#ico-bt"/></svg>
+                <span class="dev__name">Watch S9</span>
+                <span class="dev__bar"><i style="--pct:68%"></i></span>
+                <span class="dev__pct">—</span>
+              </li>
+            </ul>
+          </article>
+        </div>
+      </div>
+
+      <div class="taskbar-main">
+        <div class="taskbar-main__apps">
+          <span class="tb-app tb-app--1"></span>
+          <span class="tb-app tb-app--2"></span>
+          <span class="tb-app tb-app--3"></span>
+          <span class="tb-app tb-app--4"></span>
+          <span class="tb-app tb-app--5"></span>
+        </div>
+        <div class="taskbar-main__tray">
+          <svg class="tb-ico" aria-hidden="true"><use href="#ico-wifi"/></svg>
+          <svg class="tb-ico" aria-hidden="true"><use href="#ico-volume"/></svg>
+          <span class="trayicon" data-tray="normal"><svg viewBox="0 0 24 24"><use href="#ico-battery"/></svg></span>
+          <span class="tb-clock"><b>20:41</b><i>2026/11/7</i></span>
+        </div>
+      </div>
+    </figure>
+    <p class="desk__cap">
+      壁纸为渐变模拟。真实环境中窗口背景模糊会采样壁纸像素，因此同一块玻璃在深色与浅色壁纸上的观感不同。
+    </p>
+  </section>
+
+</main>
+
+<footer class="pagefoot">
+  <p>PowerDock 界面设计还原 · 静态稿，交互仅用于演示状态切换与面板操作。</p>
+  <p><a href="#top">回到顶部</a></p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

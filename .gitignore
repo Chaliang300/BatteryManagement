@@ -1,0 +1,22 @@
+# 构建、发布和测试产物
+**/bin/
+**/obj/
+**/TestResults/
+/dist/
+/artifacts/
+/backup/
+
+# 本地运行数据和工具状态
+/data/
+/.workbuddy/
+/.vs/
+*.user
+*.suo
+*.log
+
+# 本地配置与凭据
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
