@@ -4,10 +4,11 @@
 每收到一次需求变更，先更新本文件，再动代码。**不接受只改代码不改文档。**
 
 - 最后更新：2026-11-08
-- 当前阶段：**文档期**（设计文档与 HTML 原型，尚无 WPF 源码）
+- 当前阶段：**S0 工程基线**（.NET 10 + WPF 的 SDK 式工程、`build.ps1`/`pack.ps1`、xunit 单测已建立，构建打包与 `--self-test` 可在本机跑通；采集与界面功能尚未开始）
 - 需求与工程基线：`docs/设计方案-v0.1.md`
 - UI 参考：`docs/mockup/index.html`、`style.css`、`app.js`（方案 A）及 `docs/mockup/README.md`。验收规格以 §2.1 和 §6 为准。
 - 视觉源稿：Ardot `744804852905562`（文档记录有 7 块画板，本轮未重新核查）
+- 工程基线验证记录：`docs/验证记录-v0.1-S0-NET10工程基线.md`
 
 三条硬规矩：**文档先行**、**没有源码就不假装有**、**读不到就说未知**。
 
@@ -24,14 +25,19 @@ Windows 桌面电量中心（对外名 **PowerDock**，仓库名 BatteryManageme
 
 ## 2. 当前状态（每次任务前先确认）
 
-| 区域 | 状态 |
-| --- | --- |
-| `docs/设计方案-v0.1.md` | 已整理，待评审与实机验证 |
-| `docs/mockup/`（HTML 还原稿） | 方案 A，含双主题与可交互主窗口。已知原型差异见 §2.1 |
-| `src/` 全部 | **不存在** |
-| `build.ps1` / `pack.ps1` | **不存在**，S0 建立 |
-| 测试 | 不存在 |
-| 设计稿 | 画板 02 的圆角标注仍待复核。HTML 组件页预览已知沿用 r8，见 §2.1 C3 |
+记录口径固定为三列：**本地已实现 / PR 已合并 / 验收已通过**。「已实现」只表示工作区里跑得通，
+不表示已进入 `origin/main`，更不表示通过 S0/S1 验收。只有三列全为「是」才能对外称完成。
+
+| 区域 | 本地已实现 | PR 已合并 | 验收已通过 |
+| --- | --- | --- | --- |
+| `docs/设计方案-v0.1.md` | 是（已整理） | 是（`1f6b6d3`） | 否（待评审与实机验证） |
+| `docs/mockup/`（HTML 还原稿） | 是（方案 A，含双主题与可交互主窗口） | 是（`1f6b6d3`） | 否（已知原型差异见 §2.1） |
+| `src/PowerDock.Core` | 是（`net10.0` SDK 工程：Models / Logger / IDeviceProvider / Storage；State、Scheduling、Alerts 尚未建立） | 否（PR-S0-01） | 否 |
+| `src/PowerDock.App` | 是（`net10.0-windows` WPF 工程：Program / App / Diagnostics / Interop / Shell / Windows） | 否（PR-S0-01） | 否 |
+| `build.ps1` / `pack.ps1` | 是（`dotnet build` / `dotnet publish` 自包含未裁剪单文件，自带 SDK 探测） | 否（PR-S0-01） | 否（包体已测，可接受上限尚未确认，见 D16） |
+| `tests/PowerDock.Core.Tests` | 是（xunit + `net10.0`，12 条用例通过） | 否（PR-S0-01） | 否 |
+| `--self-test` 自检 | 是（14 项；本机 14/14 通过） | 否（PR-S0-01） | 否（仅本机单轮，未做跨机与多轮） |
+| 设计稿 | 否（画板 02 圆角标注待复核；HTML 组件页预览沿用 r8，见 §2.1 C3） | — | 否 |
 
 ### 2.1 文档冲突裁决（以本表为准，遇到旧文冲突不许自行选择）
 
@@ -361,24 +367,35 @@ Dock 浮在内容之上，所以内容区底部留 84 给它让位；不留就�
 
 ## 9. 环境与验证陷阱
 
-本机为 Windows + Git Bash。2026-11-08 的检查发现仅安装了 .NET 运行时，S0 需先准备与 D16 匹配的 SDK。以下是本机或参考项目的验证记录：
+本机为 Windows + Git Bash。2026-11-08 复核的 SDK 事实：**PATH 上的 `dotnet`（`C:\Program Files\dotnet`）只有运行时、
+没有任何 SDK**；可用的 .NET 10 SDK 是就地部署在 `%USERPROFILE%\.dotnet10` 的 **10.0.403**，
+对应运行时有 `Microsoft.NETCore.App 10.0.14` 与 `Microsoft.WindowsDesktop.App 10.0.14`（WPF 可用）。
+因此 `dotnet build` 直接调用会失败，必须让 `build.ps1`/`pack.ps1` 自己探测（见 §10），
+或手工 `$env:DOTNET_ROOT = "$env:USERPROFILE\.dotnet10"`。以下是本机或参考项目的验证记录：
 
-- `csc.exe`、`Add-Type`、`wmic`、`schtasks` 在部分执行环境被拦截 → 编译统一走 `build.ps1`（先设 Process 级 Bypass）。
+- `csc.exe`、`Add-Type`、`wmic`、`schtasks` 在部分执行环境被拦截 → 编译统一走 `build.ps1`（S0 起已改用 `dotnet build`）。
 - Bash 里调 Windows 命令时 `/PID`、`/FI` 会被 MSYS 当路径改写，要写成 `//PID`。
 - **工作区内的 exe 会被沙箱降权**，`Shell_NotifyIcon` 返回 Win32=5；验证托盘必须放到工作区外（如 `%LOCALAPPDATA%\Programs\`）。
 - 抓屏可拿像素，但**模拟鼠标/键盘的结论不可信**（独立桌面，`WindowFromPoint` 返回 None）；验证交互改用程序内部诊断入口直接调方法。
 - 判断「跑的是哪个 exe」用 `Get-CimInstance Win32_Process | Select ExecutablePath`，不要只看版本号。
 - 无头 Chrome 写 `%TEMP%` 会 0x5 拒绝访问，必须加 `--user-data-dir`；量布局用 1x，`--force-device-scale-factor` 会同时缩小 CSS 视口。
 
-## 10. 命令（S0 建立后可用，当前不存在）
+## 10. 命令（S0 起可用）
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File .\pack.ps1 -Version 0.1.0 -Zip
-dotnet test tests/PowerDock.Core.Tests
-.\PowerDock.exe --self-test          # 输出 data/self-test.json
-.\PowerDock.exe --diagnose 30        # 无界面采样 30 秒
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Configuration Release
+powershell -NoProfile -ExecutionPolicy Bypass -File .\pack.ps1 -Version 0.1.0
+dotnet test tests\PowerDock.Core.Tests\PowerDock.Core.Tests.csproj
+.\dist\PowerDock-v0.1.0-win-x64\PowerDock.exe --self-test          # 输出 <exe目录>\data\self-test.json
+.\dist\PowerDock-v0.1.0-win-x64\PowerDock.exe --diagnose 30        # 无界面采样 30 秒
 ```
+
+- 前置条件：.NET **10 SDK**（只有运行时不够）。`build.ps1` / `pack.ps1` 会自己探测 SDK，顺序为
+  `PATH` → `DOTNET_ROOT` → 常规安装目录 → 就地部署目录（`%USERPROFILE%\.dotnet10` 等），探测逻辑在
+  `tools/dotnet-sdk.ps1`；全部失败时打印中文安装指引并以非零码退出。
+- 仓库**不提交 `global.json`**：不锁补丁版本，避免团队升级 SDK 后互相构建失败。
+- `build.ps1` 产出框架依赖输出（需目标机有 .NET 10 运行时）；分发给用户的一律用 `pack.ps1` 的自包含单文件。
+- `pack.ps1` 的参数位是 `-Version`、`-RuntimeIdentifier`（默认 `win-x64`）、`-NoZip`；产物与度量报告落在 `dist/`。
 
 诊断开关一律 `--` 前缀、只读优先、失败要有可读原因。
 
@@ -392,6 +409,11 @@ dotnet test tests/PowerDock.Core.Tests
 | S3 打磨 | 7 天趋势、低电量提醒、别名排序、性能 | 质量指标达标，验证记录归档 |
 
 依赖顺序是硬的：**外壳先于采集，采集先于界面**。外壳问题拖到最后，会被界面改动反复触发回归。
+
+S0 状态（2026-11-08，口径同 §2）：骨架代码、`build.ps1`/`pack.ps1`、xunit 单测、`--self-test` **本地已实现**；
+**PR 已合并=否**（PR-S0-01 起进入 `origin/main`）；**验收已通过=否**。
+出口条件中「常规二启、并发二启、置前拒绝均可验证」与「无 SDK 目标机可启动」仍需独立复验，
+本机只记录了包体、解包行为与单轮自检结果，见 `docs/验证记录-v0.1-S0-NET10工程基线.md`。
 
 ## 12. 质量指标
 
@@ -452,3 +474,4 @@ dotnet test tests/PowerDock.Core.Tests
 | 2026-11-07 | 初版：文档期状态、D1–D9、7 条外壳约束、编码与交付规则 |
 | 2026-11-07 | 全文重写为「契约 + 架构 + UI」三合一：新增 §5 系统架构（分层/模块职责/契约/数据流/交互关系）、§6 UI 方案（token/挂件/主窗口四页/交互/三态/托盘）、§2.1 五条文档冲突裁决；锁定 D10–D15（挂件 173/362 规格、主窗口 880×600、无表头、阈值语义色、三格托盘、材质）；原 9 条决策与 7 条外壳约束保留 |
 | 2026-11-08 | 补齐首轮工程基线：D16/D17、Provider 与设备身份、刷新与三态、二启与托盘降级、原型差异、S0/S1 验收及发布边界 |
+| 2026-11-08 | 迁移到 .NET 10 SDK 式工程（PR-S0-01）：§2 状态表改为「本地已实现 / PR 已合并 / 验收已通过」三列口径并写入事实；§9 记录 SDK 10.0.403 就地部署与 PATH 无 SDK 的事实；§10 命令改为 `dotnet build`/`dotnet publish` 并补 SDK 探测说明；§11 补 S0 三态状态；`settings.json` 序列化改为 `System.Text.Json` |

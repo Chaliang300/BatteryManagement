@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>PowerDock.Core</AssemblyName>
+    <RootNamespace>PowerDock.Core</RootNamespace>
+    <!-- 保持 .NET Framework 时期源码命名空间不变：关闭隐式 using 与可空引用类型推断 -->
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+</Project>

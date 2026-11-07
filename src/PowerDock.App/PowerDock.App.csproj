@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <!-- 托盘 NotifyIcon 与旧版 System.Drawing 位图绘制仍走 WinForms 控件集 -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>PowerDock</AssemblyName>
+    <RootNamespace>PowerDock.App</RootNamespace>
+    <ApplicationManifest>..\..\app.manifest</ApplicationManifest>
+    <StartupObject>PowerDock.App.Program</StartupObject>
+    <!-- 保持 .NET Framework 时期源码命名空间不变：关闭隐式 using 与可空引用类型推断 -->
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Version>0.1.0</Version>
+    <Product>PowerDock</Product>
+    <Company>PowerDock</Company>
+    <Copyright>MIT License</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PowerDock.Core\PowerDock.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -6,6 +6,9 @@
 /artifacts/
 /backup/
 
+# 可执行产物：旧 csc 基线会把 PowerDock.exe 落在仓库根，禁止误提交
+*.exe
+
 # 本地运行数据和工具状态
 /data/
 /.workbuddy/
