@@ -1,4 +1,4 @@
-﻿#requires -Version 5.1
+#requires -Version 5.1
 <#
 .SYNOPSIS
     Acceptance gate for PowerDock single-instance behaviour (PR-S0-03 main deliverable).
@@ -976,6 +976,67 @@ try {
     Add-Check -Case $case -Name 're-acquired instance owns a visible window' -Pass ($st6['VISIBLE'] -eq 'True') -Detail ('VISIBLE=' + $st6['VISIBLE'])
     Stop-App
     Complete-Case -Case $case -CaseDir $caseDir
+
+    # ---- C7 busy primary: a silent pipe client must not be reported as "no primary" ----
+    Write-Section 'C7 busy primary (silent client) -> exit 21, primary survives'
+    $case = New-Case 'C7' 'busy primary: second start reports 21 (not 20), primary keeps running'
+    $caseDir = New-CaseDir 'C7'
+    Clear-PowerDockState
+    $dirty7 = Test-CleanState
+    if (-not $dirty7.Clean) {
+        Start-Sleep -Milliseconds 1200
+        Clear-PowerDockState
+        $dirty7 = Test-CleanState
+    }
+    Assert-CleanState -Case $case -Context 'C7'
+    if (-not $dirty7.Clean) {
+        Add-Check -Case $case -Name 'C7 aborted: environment not clean (another agent instance is running)' -Pass $false -Detail ('processes=' + $dirty7.ProcessCount + ' pipes=' + ($dirty7.Pipes -join ','))
+        Complete-Case -Case $case -CaseDir $caseDir
+        Stop-App
+    } else {
+        $logStart = (Get-AppLogLines).Count
+        $primary7 = Start-Primary -ExtraArgs @()
+        Add-Check -Case $case -Name 'primary window appears' -Pass ($primary7.WindowMs -ge 0) -Detail ('windowMs=' + $primary7.WindowMs)
+        $silent = $null
+        $silentOk = $false
+        try {
+            $silent = New-Object System.IO.Pipes.NamedPipeClientStream('.', $pipeName, [System.IO.Pipes.PipeDirection]::InOut)
+            $silent.Connect(2000)
+            $silentOk = $true
+        } catch {
+            $silentOk = $false
+        }
+        Add-Check -Case $case -Name 'silent client connected and holds the pipe without sending a request' -Pass $silentOk -Detail ('connected=' + $silentOk)
+        if ($silentOk) {
+            Start-Sleep -Milliseconds 300
+            $sw7 = [System.Diagnostics.Stopwatch]::StartNew()
+            $secondary7 = Start-Process -FilePath $script:ExeFullPath -ArgumentList @('--no-feedback') -PassThru
+            $exited7 = $secondary7.WaitForExit([Math]::Max(12000, $TimeoutMs * 6))
+            $sw7.Stop()
+            $actualExit7 = if ($exited7) { $secondary7.ExitCode } else { -1 }
+            $case.evidence['secondaryExit'] = $actualExit7
+            $case.evidence['secondaryElapsedMs'] = [int]$sw7.ElapsedMilliseconds
+            Add-Check -Case $case -Name 'second start exits (no hang while primary is busy)' -Pass ($exited7) -Detail ('exited=' + $exited7 + ' ms=' + [int]$sw7.ElapsedMilliseconds)
+            # Core assertion: a busy primary must NEVER be reported as "no primary instance".
+            # After the connect window was widened to ProtocolTimeoutMs + 1000, the secondary usually
+            # RECOVERS once the server drops the silent client (~2500ms) and then gets 22 (denied in a
+            # locked session) / 0 (interactive). 21 remains the correct answer when it still cannot
+            # connect. Both are acceptable; 20 is the bug.
+            Add-Check -Case $case -Name 'NOT NoPrimary(20): a busy primary must not be reported as "no primary"' -Pass ($actualExit7 -ne $script:ExitCodes.NoPrimary) -Detail ('exit=' + $actualExit7)
+            Add-Check -Case $case -Name 'exit in {21 PrimaryNotReady, 22 ForegroundDenied}' -Pass (@($script:ExitCodes.PrimaryNotReady, $script:ExitCodes.ForegroundDenied) -contains $actualExit7) -Detail ('exit=' + $actualExit7)
+            Add-Check -Case $case -Name 'primary still running after the busy rejection' -Pass (@(Get-PowerDockProcesses).Count -ge 1) -Detail ('processes=' + @(Get-PowerDockProcesses).Count)
+            $slice7 = Get-LogSlice -startIndex $logStart
+            Save-Artifact -CaseDir $caseDir -name 'log-slice.txt' -content ($slice7 -join "`r`n") | Out-Null
+            $noPrimaryLine = ($slice7 | Where-Object { $_ -match 'case=NO_PRIMARY' } | Select-Object -First 1)
+            Add-Check -Case $case -Name 'log does not report case=NO_PRIMARY while the primary is alive' -Pass (-not [bool]$noPrimaryLine) -Detail ([string]$noPrimaryLine)
+            $busyLine = ($slice7 | Where-Object { $_ -match 'case=PRIMARY_BUSY' } | Select-Object -First 1)
+            $case.evidence['busyReasonLine'] = [string]$busyLine
+            $case.evidence['noPrimaryLine'] = [string]$noPrimaryLine
+        }
+        if ($silent) { try { $silent.Dispose() } catch { } }
+        Complete-Case -Case $case -CaseDir $caseDir
+        Stop-App
+    }
 
     # ---- summary ----
     $failed = @($script:Cases | Where-Object { $_.status -ne 'pass' })

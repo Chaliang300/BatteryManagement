@@ -65,7 +65,12 @@ namespace PowerDock.App.Shell
     public sealed class SingleInstanceService : IDisposable
     {
         private const int ReadyWaitMs = 1500;
-        private const int ConnectWaitMs = 1500;
+        // The secondary must outwait the server's own protocol timeout (ProtocolTimeoutMs) plus a
+        // margin. Otherwise a busy primary (still dropping a silent client) cannot accept the new
+        // connection in time and the secondary misreports "no primary instance" (20) instead of
+        // "primary not ready" (21). Measured failure: silent client holds the pipe -> next normal
+        // second start returned exit=20 after 1584ms while the primary was alive and busy.
+        private const int ConnectWaitMs = ProtocolTimeoutMs + 1000;
         private const int ProtocolTimeoutMs = 2500;
         private const int FeedbackDialogMs = 4000;
 
@@ -264,7 +269,7 @@ namespace PowerDock.App.Shell
                 }
                 catch (Exception ex)
                 {
-                    SecondaryFailureDetail = "Failed to open readiness event '" + _readyEventName + "': " + ex.Message;
+                    SecondaryFailureDetail = "Failed to open readiness event '" + _readyEventName + "': " + ex.Message + " [case=NO_PRIMARY]";
                     AppLogger.Warn(SecondaryFailureDetail);
                     return SingleInstanceExitCodes.NoPrimary;
                 }
@@ -272,7 +277,7 @@ namespace PowerDock.App.Shell
 
             if (ready == null)
             {
-                SecondaryFailureDetail = "No primary instance: mutex is held but readiness event '" + _readyEventName + "' is absent after " + readyWaitMs + "ms";
+                SecondaryFailureDetail = "No primary instance: mutex is held but readiness event '" + _readyEventName + "' is absent after " + readyWaitMs + "ms [case=NO_PRIMARY]";
                 AppLogger.Warn(SecondaryFailureDetail);
                 return SingleInstanceExitCodes.NoPrimary;
             }
@@ -314,9 +319,13 @@ namespace PowerDock.App.Shell
 
                 if (!connected)
                 {
-                    SecondaryFailureDetail = "Primary instance signaled ready but the pipe did not accept a connection within " + connectWaitMs + "ms";
-                    AppLogger.Warn("Failed to connect to primary instance named pipe within timeout: " + connectWaitMs + "ms");
-                    return SingleInstanceExitCodes.NoPrimary;
+                    // The readiness event existed, so a primary IS present; the pipe simply did not
+                    // accept a connection in time (typically: the primary is still busy dropping a
+                    // silent client, which takes ProtocolTimeoutMs). Report "primary not ready" (21),
+                    // never "no primary" (20) — 20 is reserved for an absent readiness event.
+                    SecondaryFailureDetail = "Primary instance is busy: readiness event exists but the pipe did not accept a connection within " + connectWaitMs + "ms (server drops silent clients after " + ProtocolTimeoutMs + "ms) [case=PRIMARY_BUSY]";
+                    AppLogger.Warn("Failed to connect to primary instance named pipe within timeout: " + connectWaitMs + "ms [case=PRIMARY_BUSY]");
+                    return SingleInstanceExitCodes.PrimaryNotReady;
                 }
 
                 // 3) Directed foreground grant to the *primary* PID (never ASFW_ANY), with the
@@ -379,7 +388,7 @@ namespace PowerDock.App.Shell
                         return SingleInstanceExitCodes.ForegroundDenied;
                     case "IDENTITYREJECTED":
                     case "IDENTITY_REJECTED":
-                        SecondaryFailureDetail = "Primary instance rejected the client identity";
+                        SecondaryFailureDetail = "Primary instance rejected the client identity [case=IDENTITY_REJECTED]";
                         AppLogger.Warn(SecondaryFailureDetail);
                         return SingleInstanceExitCodes.IdentityRejected;
                     default:
@@ -578,7 +587,7 @@ namespace PowerDock.App.Shell
             string rejectReason;
             if (!ValidateClientIdentity(server, out clientPid, out rejectReason))
             {
-                AppLogger.Warn("Rejected pipe client: " + rejectReason);
+                AppLogger.Warn("Rejected pipe client: " + rejectReason + " [case=IDENTITY_REJECTED]");
                 TrySendResult(server, ActivationResult.IdentityRejected);
                 return;
             }
