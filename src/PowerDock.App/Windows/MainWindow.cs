@@ -34,6 +34,8 @@ namespace PowerDock.App.Windows
         private readonly Dictionary<MainPage, DockItemVisual> _dockItems = new Dictionary<MainPage, DockItemVisual>();
         private readonly Dictionary<MainPage, MainPageVisual> _pages = new Dictionary<MainPage, MainPageVisual>();
         private readonly Dictionary<MainPage, double> _savedScrollOffsets = new Dictionary<MainPage, double>();
+        // 外部注入的页内容（采集层挂载的设备视图）。空态是默认内容，被覆盖后仍然只在这一页生效。
+        private readonly Dictionary<MainPage, UIElement> _pageOverrides = new Dictionary<MainPage, UIElement>();
         private MainPage _currentPage = MainPage.Overview;
         private bool _contentBound;
 
@@ -294,6 +296,46 @@ namespace PowerDock.App.Windows
             }
         }
 
+        /// <summary>
+        /// 用外部视图填充某一页的**内容槽**（采集层挂载设备视图走这条）。
+        /// 页标题与外部视图是两件事：外部视图只填内容槽，**不得抹掉页面标题**
+        /// （把整页面板替换掉会让 PageTitle 消失，外部验证按标题判切页就会误判）。
+        /// **导航状态机仍是 _contentHost 的唯一控制者**：只有该页当前可见时才换宿主内容，
+        /// 否则仅记账，等切到该页时再显示。这样采集回调永远不会顶掉用户正在看的页面。
+        /// </summary>
+        /// <returns>页面存在且填充成功。</returns>
+        internal bool ReplacePageContent(MainPage page, UIElement content)
+        {
+            if (content == null || !MainPageCatalog.IsDefined(page))
+            {
+                return false;
+            }
+
+            MainPageVisual visual;
+            if (!_pages.TryGetValue(page, out visual) || visual == null || visual.ContentSlot == null)
+            {
+                return false;
+            }
+
+            _pageOverrides[page] = content;
+            visual.ContentSlot.Children.Clear();
+            visual.ContentSlot.Children.Add(content);
+
+            // 空态说明只在没有真实内容时显示。
+            if (visual.EmptyStateCard != null)
+            {
+                visual.EmptyStateCard.Visibility = Visibility.Collapsed;
+            }
+
+            if (_contentBound && page == _currentPage)
+            {
+                _contentHost.Content = visual.Scroll;
+                UpdateDockSelection();
+            }
+
+            return true;
+        }
+
         private void SaveScrollOffset(MainPage page)
         {
             MainPageVisual visual;
@@ -435,6 +477,26 @@ namespace PowerDock.App.Windows
         {
             MainPageVisual visual;
             return _pages.TryGetValue(page, out visual) ? visual.Scroll : null;
+        }
+
+        /// <summary>该页当前承载的内容（外部注入过就是注入视图，否则是默认空态面板）。</summary>
+        internal UIElement PageContent(MainPage page)
+        {
+            UIElement overridden;
+            if (_pageOverrides.TryGetValue(page, out overridden))
+            {
+                return overridden;
+            }
+
+            MainPageVisual visual;
+            return _pages.TryGetValue(page, out visual) ? visual.Panel : null;
+        }
+
+        /// <summary>诊断用：拿到一页的结构件（标题 / 内容槽 / 空态卡片 / ScrollViewer）。</summary>
+        internal MainPageVisual PageVisualForDiagnostics(MainPage page)
+        {
+            MainPageVisual visual;
+            return _pages.TryGetValue(page, out visual) ? visual : null;
         }
 
         internal Border DockCapsule

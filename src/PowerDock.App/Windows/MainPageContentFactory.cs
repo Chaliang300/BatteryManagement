@@ -17,6 +17,14 @@ namespace PowerDock.App.Windows
         public StackPanel Panel { get; set; }
         public TextBlock TitleText { get; set; }
         public List<string> EmptyStateLines { get; set; }
+
+        /// <summary>
+        /// 外部内容槽（采集层挂设备视图用）。标题永远在槽外，所以注入内容不会抹掉页标题。
+        /// </summary>
+        public StackPanel ContentSlot { get; set; }
+
+        /// <summary>空态卡片。有真实内容注入时折叠，避免"既显示设备列表又显示未发现设备"。</summary>
+        public Border EmptyStateCard { get; set; }
     }
 
     /// <summary>
@@ -90,6 +98,15 @@ namespace PowerDock.App.Windows
             }
 
             emptyCard.Child = cardStack;
+
+            // 内容槽在空态卡片之上：外部注入真实内容后折叠空态，标题始终在两者之外。
+            var contentSlot = new StackPanel
+            {
+                Orientation = Orientation.Vertical,
+                HorizontalAlignment = HorizontalAlignment.Stretch
+            };
+            AutomationProperties.SetAutomationId(contentSlot, MainPageCatalog.PageAutomationId(page) + ".ContentSlot");
+            panel.Children.Add(contentSlot);
             panel.Children.Add(emptyCard);
 
             var scroll = new ScrollViewer
@@ -109,7 +126,9 @@ namespace PowerDock.App.Windows
                 Scroll = scroll,
                 Panel = panel,
                 TitleText = title,
-                EmptyStateLines = allLines
+                EmptyStateLines = allLines,
+                ContentSlot = contentSlot,
+                EmptyStateCard = emptyCard
             };
         }
 

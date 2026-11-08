@@ -842,6 +842,59 @@ namespace PowerDock.App.Diagnostics
 
             RecordDockStep(steps, "NAV-DIAG-09", raceOk, raceDetail);
 
+            // 8) 采集挂载与导航状态机的一致性（PR #13 合并后的专项）。
+            //    上游 AttachDeviceSummary 原实现直接赋值 _contentHost.Content，会绕过导航状态机：
+            //    切到设置页后采集回调把设置页顶掉、而 CurrentPage 仍停在 Settings。
+            //    本实现改为经 ReplacePageContent 注入设备页。这里断言三件事：
+            //    a) 挂载成功且设备视图落在「设备页」的 ScrollViewer 里；
+            //    b) 挂载后切到别的页再切回设备页，宿主内容仍是设备视图（没有被空态换回）；
+            //    c) 在非设备页时切页，宿主内容始终等于该页应有的内容（采集回调不越权）。
+            bool attachOk = false;
+            string attachDetail;
+            try
+            {
+                bool attached = window.AttachDeviceSummary();
+                UIElement devView = window.PageContent(MainPage.Devices);
+
+                // 判据跟随结构：设备视图应落在设备页的**内容槽**里，而页标题必须仍在（不被替换掉）。
+                // 直接比对 Scroll.Content 会把「标题还在、视图在槽里」的正确结构误判为失败。
+                MainPageVisual devVisual = window.PageVisualForDiagnostics(MainPage.Devices);
+                bool viewInContentSlot = devVisual != null && devVisual.ContentSlot != null &&
+                                         devVisual.ContentSlot.Children.Count == 1 &&
+                                         ReferenceEquals(devVisual.ContentSlot.Children[0], devView);
+                bool titleStillPresent = devVisual != null && devVisual.TitleText != null &&
+                                         devVisual.TitleText.Text == MainPageCatalog.Title(MainPage.Devices);
+                bool emptyStateCollapsed = devVisual != null && devVisual.EmptyStateCard != null &&
+                                           devVisual.EmptyStateCard.Visibility == Visibility.Collapsed;
+
+                window.NavigateTo(MainPage.Settings);
+                window.UpdateLayout();
+                bool settingsShowsOwnContent = ReferenceEquals(window.ContentHost.Content,
+                    window.PageView(MainPage.Settings));
+
+                window.NavigateTo(MainPage.Devices);
+                window.UpdateLayout();
+                bool backToDeviceShowsView = ReferenceEquals(window.ContentHost.Content,
+                                                 window.PageView(MainPage.Devices)) &&
+                                             devVisual.ContentSlot.Children.Count == 1 &&
+                                             ReferenceEquals(devVisual.ContentSlot.Children[0], devView);
+
+                attachOk = attached && window.DeviceSummaryAttached && viewInContentSlot &&
+                           titleStillPresent && emptyStateCollapsed &&
+                           settingsShowsOwnContent && backToDeviceShowsView;
+                attachDetail = string.Format(
+                    "AttachDeviceSummary={0}; 视图在内容槽内={1}; 页标题仍在={2}; 空态已折叠={3}; " +
+                    "设置页宿主内容正确={4}; 切回设备页仍显示设备视图={5}; DeviceSummaryAttached={6}",
+                    attached, viewInContentSlot, titleStillPresent, emptyStateCollapsed,
+                    settingsShowsOwnContent, backToDeviceShowsView, window.DeviceSummaryAttached);
+            }
+            catch (Exception attachEx)
+            {
+                attachDetail = attachEx.GetType().Name + ": " + attachEx.Message;
+            }
+
+            RecordDockStep(steps, "NAV-DIAG-10", attachOk, attachDetail);
+
             foreach (DockNavStep step in steps)
             {
                 if (step.Status == "failed") return false;

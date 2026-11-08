@@ -41,6 +41,15 @@ namespace PowerDock.App.Windows
             return (MainPage[])OrderedPages.Clone();
         }
 
+        /// <summary>
+        /// 枚举合法性。导航入口与外部页内容注入都必须先过这一关：
+        /// 传入未定义值时抛 <see cref="ArgumentOutOfRangeException"/> 而不是静默显示空页。
+        /// </summary>
+        public static bool IsDefined(MainPage page)
+        {
+            return Array.IndexOf(OrderedPages, page) >= 0;
+        }
+
         public static string Icon(MainPage page)
         {
             switch (page)
