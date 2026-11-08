@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   独立外部验证：PowerDock 主窗口底部 Dock 四项导航（真实鼠标 / 真实键盘 / UI Automation 语义）。
@@ -150,6 +150,12 @@ public static class QaNative
     [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
     [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr h, uint cmd);
     [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr h);
+    [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h, int x, int y, int w, int height, bool repaint);
+
+    // 屏幕尺寸必须实测：探针窗口与窗口定位一旦硬编码坐标，换到小屏就会落到可视区之外，
+    // 于是"真实鼠标没到达探针"被误记成输入通道失效（2026-11-08 实测踩过）。
+    public static int ScreenWidth() { return GetSystemMetrics(0); }
+    public static int ScreenHeight() { return GetSystemMetrics(1); }
 
     private delegate bool EnumProc(IntPtr h, IntPtr l);
     [DllImport("user32.dll")] private static extern bool EnumWindows(EnumProc cb, IntPtr l);
@@ -1225,7 +1231,14 @@ try {
     # 3. 输入通道自证（与产品无关的自建对照窗口）
     # ------------------------------------------------------------------
     Write-Ev '--- 步骤 3：输入通道自证（自建 Win32 探针窗口） ---' 'Cyan'
-    $probeX = 1900; $probeY = 60; $probeW = 420; $probeH = 260
+    # 探针坐标必须按实测屏幕算，不能硬编码：换到小屏后硬编码坐标会落到屏外，
+    # 于是「真实鼠标点击没到达探针」被误记成输入通道失效（2026-11-08 实测踩过）。
+    $screenW = [int][QaNative]::ScreenWidth()
+    $screenH = [int][QaNative]::ScreenHeight()
+    $probeW = [Math]::Min(420, [Math]::Max(200, $screenW - 40))
+    $probeH = [Math]::Min(260, [Math]::Max(160, $screenH - 40))
+    $probeX = [Math]::Max(0, $screenW - $probeW - 20)
+    $probeY = 20
     $probeHwnd = [QaProbe]::Start($probeX, $probeY, $probeW, $probeH)
     Start-Sleep -Milliseconds 500
     $probeRec = [ordered]@{
