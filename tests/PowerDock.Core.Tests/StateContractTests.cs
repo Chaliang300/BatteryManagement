@@ -391,5 +391,59 @@ namespace PowerDock.Core.Tests
             Assert.Equal(BatterySource.BluetoothGatt, snapshot[0].AuthoritativeSource);
             service.Dispose();
         }
+
+        [Fact]
+        public void LinkArbiter_PrefersConnectedBluetoothOverUnknownUsbBus()
+        {
+            DateTime now = new DateTime(2026, 11, 8, 4, 0, 0, DateTimeKind.Utc);
+            var bleLink = new LinkInfo(LinkKind.Bluetooth, "ble", true, true, false, now);
+            var usbBusLink = new LinkInfo(LinkKind.Unknown, "usb parent only", false, true, false, now);
+
+            LinkInfo chosen = LinkArbiter.Choose(usbBusLink, bleLink);
+            Assert.Equal(LinkKind.Bluetooth, chosen.Kind);
+
+            // Reversing input order still picks Bluetooth
+            LinkInfo chosenReverse = LinkArbiter.Choose(bleLink, usbBusLink);
+            Assert.Equal(LinkKind.Bluetooth, chosenReverse.Kind);
+        }
+
+        [Fact]
+        public void LinkArbiter_PrefersConnectedWiredOverReceiverOnly()
+        {
+            DateTime now = new DateTime(2026, 11, 8, 4, 0, 0, DateTimeKind.Utc);
+            var receiverLink = new LinkInfo(LinkKind.Wireless24G, "rx", false, true, true, now);
+            var wiredLink = new LinkInfo(LinkKind.UsbWired, "wired", false, true, false, now);
+
+            Assert.Equal(LinkKind.UsbWired, LinkArbiter.Choose(receiverLink, wiredLink).Kind);
+        }
+
+        [Fact]
+        public void AnonymousNameDoesNotOverwriteRealDeviceName()
+        {
+            DateTime now = new DateTime(2026, 11, 8, 4, 0, 0, DateTimeKind.Utc);
+            var service = new DeviceStateService(delegate { return now; }, null, null);
+            var provider = new FakeProvider();
+            service.Attach(provider);
+
+            var identity = DeviceIdentity.FromContainer("{bbb}", "p", "0001", "0002");
+            var key1 = new ReadingKey("bluetooth", "bbb", "battery");
+            var key2 = new ReadingKey("hid", "bbb", "battery");
+
+            // First update: real Bluetooth name
+            var bleDev = new ProviderDevice(identity, new LinkInfo(LinkKind.Bluetooth, "ble", true, true, false, now),
+                key1, "Kzzi-i75", DeviceCategory.Keyboard, BatterySource.BluetoothGatt, 90, null, PercentUnavailableReason.None, now, string.Empty);
+            provider.Emit(new ProviderUpdate(UpdateKind.ReadingUpdated, key1, bleDev, ConnectionState.Online));
+
+            // Second update: generic fallback HID name from HOGP interface
+            var hidDev = new ProviderDevice(identity, new LinkInfo(LinkKind.Unknown, "hid", false, true, false, now),
+                key2, "HID 设备 (VID 046D PID C52B)", DeviceCategory.Other, BatterySource.Hid, null, null, PercentUnavailableReason.NoStandardBatteryUsage, now, string.Empty);
+            provider.Emit(new ProviderUpdate(UpdateKind.ReadingUpdated, key2, hidDev, ConnectionState.Online));
+
+            var snapshot = service.PublishNow();
+            Assert.Single(snapshot);
+            Assert.Equal("Kzzi-i75", snapshot[0].DisplayName);
+            Assert.Equal(LinkKind.Bluetooth, snapshot[0].Link.Kind);
+            service.Dispose();
+        }
     }
 }

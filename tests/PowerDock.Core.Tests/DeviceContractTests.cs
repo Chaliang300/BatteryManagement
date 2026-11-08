@@ -115,5 +115,23 @@ namespace PowerDock.Core.Tests
             Assert.Equal("no_battery_service", ContractText.Key(PercentUnavailableReason.NoBatteryService));
             Assert.Equal("unknown", ContractText.Key(ConnectionState.Unknown));
         }
+
+        [Fact]
+        public void UnusableContainerSentinel_IsRejected()
+        {
+            Assert.False(DeviceIdentity.IsUsableContainer(null));
+            Assert.False(DeviceIdentity.IsUsableContainer(""));
+            Assert.False(DeviceIdentity.IsUsableContainer("00000000-0000-0000-0000-000000000000"));
+            Assert.False(DeviceIdentity.IsUsableContainer("{00000000-0000-0000-0000-000000000000}"));
+            Assert.False(DeviceIdentity.IsUsableContainer("00000000-0000-0000-ffff-ffffffffffff"));
+            Assert.False(DeviceIdentity.IsUsableContainer("{00000000-0000-0000-ffff-ffffffffffff}"));
+
+            Assert.Throws<ArgumentException>(delegate
+            {
+                DeviceIdentity.FromContainer("00000000-0000-0000-ffff-ffffffffffff", "HID\\1", "0001", "0002");
+            });
+
+            Assert.True(DeviceIdentity.IsUsableContainer("4f8cc29c-c9eb-5de7-8134-8b4f2b3b6667"));
+        }
     }
 }

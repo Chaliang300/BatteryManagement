@@ -55,16 +55,34 @@ namespace PowerDock.Core.Common
             ProductId = productId ?? string.Empty;
         }
 
-        /// <summary>用容器 ID 建立可信身份；containerId 为空时抛异常，调用方应改用 <see cref="FromFallback"/>。</summary>
+        /// <summary>
+        /// 用容器 ID 建立可信身份。空值与 Windows 的「无容器」哨兵 GUID 一律视为不可用并抛异常，
+        /// 调用方必须改用 <see cref="FromFallback"/>。哨兵值 00000000-0000-0000-ffff-ffffffffffff
+        /// 会把所有虚拟/根枚举设备并成同一台，是最容易犯的静默合并错误。
+        /// </summary>
         public static DeviceIdentity FromContainer(string containerId, string instancePath, string vendorId, string productId)
         {
-            if (string.IsNullOrWhiteSpace(containerId))
+            if (!IsUsableContainer(containerId))
             {
-                throw new ArgumentException("容器 ID 为空时不能建立可信身份，请使用 FromFallback。", "containerId");
+                throw new ArgumentException("容器 ID 缺失或无意义，不能建立可信身份，请使用 FromFallback。", "containerId");
             }
 
             string normalized = NormalizeContainer(containerId);
             return new DeviceIdentity(new DeviceKey("container:" + normalized), true, containerId, instancePath, vendorId, productId);
+        }
+
+        /// <summary>
+        /// 判断容器 ID 是否可作为合并依据：非空、不是全零、不是 Windows 表示「无容器」的
+        /// 00000000-0000-0000-ffff-ffffffffffff 哨兵。
+        /// </summary>
+        public static bool IsUsableContainer(string containerId)
+        {
+            if (string.IsNullOrWhiteSpace(containerId)) return false;
+
+            string normalized = NormalizeContainer(containerId);
+            if (normalized == "00000000-0000-0000-0000-000000000000") return false;
+            if (normalized == "00000000-0000-0000-ffff-ffffffffffff") return false;
+            return true;
         }
 
         /// <summary>

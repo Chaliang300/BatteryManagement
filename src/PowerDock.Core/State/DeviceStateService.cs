@@ -181,9 +181,17 @@ namespace PowerDock.Core.State
 
             DeviceRegistry.Record record = _registry.GetOrAdd(device.Identity);
             record.Identity = device.Identity;
-            record.Link = device.Link;
-            record.DisplayName = device.DisplayName;
-            record.Category = device.Category;
+            // 同一物理设备可能被多条链路枚举（BLE + HOGP HID 接口）：链路显式裁决，不按到达顺序覆盖。
+            record.Link = LinkArbiter.Choose(record.Link, device.Link);
+            // 名称同样不许被后到的匿名回退名覆盖掉蓝牙通告的真实名称。
+            if (string.IsNullOrEmpty(record.DisplayName) || IsMoreSpecificName(device.DisplayName, record.DisplayName))
+            {
+                record.DisplayName = device.DisplayName;
+            }
+            if (record.Category == DeviceCategory.Other && device.Category != DeviceCategory.Other)
+            {
+                record.Category = device.Category;
+            }
 
             SourceReading reading;
             if (!record.Readings.TryGetValue(device.Key, out reading))
@@ -220,6 +228,21 @@ namespace PowerDock.Core.State
                         device.Detail);
                     break;
             }
+        }
+
+        /// <summary>
+        /// 名称回退判据：匿名名（如「HID 设备」「HID 设备 (VID ...)」）不得覆盖已有真实名称，
+        /// 真实名称可以覆盖匿名名或空值。避免后到的 HID 端点把蓝牙通告的名称刷掉。
+        /// </summary>
+        private static bool IsMoreSpecificName(string incoming, string existing)
+        {
+            if (string.IsNullOrEmpty(incoming)) return false;
+            if (string.IsNullOrEmpty(existing)) return true;
+
+            bool incomingAnonymous = incoming.StartsWith("HID 设备", StringComparison.Ordinal);
+            bool existingAnonymous = existing.StartsWith("HID 设备", StringComparison.Ordinal);
+            if (incomingAnonymous == existingAnonymous) return false;
+            return existingAnonymous;
         }
 
         private DateTime EffectiveTimestamp(ProviderDevice device)
