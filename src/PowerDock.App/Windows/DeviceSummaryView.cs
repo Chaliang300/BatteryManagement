@@ -15,9 +15,10 @@ namespace PowerDock.App.Windows
     /// 3. 身份未确认、来源冲突、读数过期都在行内明示，不偷偷隐藏。
     /// 独立成文件是为了不与 Dock 导航 PR 抢同一个窗口文件。
     /// </summary>
-    public sealed class DeviceSummaryView : UserControl
+    public sealed class DeviceSummaryView : UserControl, IDeviceLocator
     {
         private readonly StackPanel _rows;
+        private string _selectedDeviceKey;
 
         public DeviceSummaryView()
         {
@@ -64,6 +65,10 @@ namespace PowerDock.App.Windows
             foreach (DeviceState state in snapshot)
             {
                 _rows.Children.Add(BuildRow(state));
+            }
+            if (!string.IsNullOrEmpty(_selectedDeviceKey))
+            {
+                SelectAndScrollToDevice(_selectedDeviceKey);
             }
         }
 
@@ -142,13 +147,47 @@ namespace PowerDock.App.Windows
 
             return new Border
             {
+                Tag = state.Key != null ? state.Key.Value : string.Empty,
                 Background = new SolidColorBrush(Color.FromArgb(18, 255, 255, 255)),
+                BorderBrush = Brushes.Transparent,
+                BorderThickness = new Thickness(1.5),
                 CornerRadius = new CornerRadius(6),
                 Padding = new Thickness(12, 8, 12, 8),
                 Margin = new Thickness(0, 0, 0, 8),
                 Child = grid,
                 Opacity = state.State == ConnectionState.Offline ? 0.6 : 1.0
             };
+        }
+
+        public bool SelectAndScrollToDevice(DeviceKey key)
+        {
+            if (key == null) return false;
+            return SelectAndScrollToDevice(key.Value);
+        }
+
+        public bool SelectAndScrollToDevice(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return false;
+            _selectedDeviceKey = key;
+            bool found = false;
+            foreach (UIElement elem in _rows.Children)
+            {
+                Border border = elem as Border;
+                if (border == null) continue;
+                string tag = border.Tag as string;
+                bool match = string.Equals(tag, key, StringComparison.OrdinalIgnoreCase);
+                if (match)
+                {
+                    border.BorderBrush = new SolidColorBrush(Color.FromRgb(107, 166, 255)); // --accent
+                    border.BringIntoView();
+                    found = true;
+                }
+                else
+                {
+                    border.BorderBrush = Brushes.Transparent;
+                }
+            }
+            return found;
         }
 
         private static string DescribeFoot(DeviceState state)

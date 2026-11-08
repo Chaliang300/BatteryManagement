@@ -5,6 +5,9 @@ using System.Drawing;
 using System.IO;
 using System.Text;
 using System.Threading;
+using System.Windows;
+using System.Windows.Automation;
+using System.Windows.Controls;
 using Microsoft.Win32;
 using PowerDock.App.Interop;
 using PowerDock.App.Shell;
@@ -891,6 +894,189 @@ namespace PowerDock.App.Diagnostics
                 });
             }
 
+            // NAV-01: Dock 结构契约（D19 / AGENTS.md §6.4.1）——四项都是可聚焦 Button，带无障碍语义
+            try
+            {
+                var navWin = new MainWindow();
+                MainPage[] pages = MainPageCatalog.All();
+                var problems = new List<string>();
+                if (pages.Length != 4) problems.Add("pageCount=" + pages.Length);
+
+                foreach (MainPage page in pages)
+                {
+                    Button button = navWin.DockButton(page);
+                    if (button == null) { problems.Add(page + ":missingButton"); continue; }
+                    if (!button.Focusable) problems.Add(page + ":notFocusable");
+                    if (!button.IsTabStop) problems.Add(page + ":notTabStop");
+                    if (string.IsNullOrEmpty(AutomationProperties.GetName(button))) problems.Add(page + ":emptyAutomationName");
+                    if (AutomationProperties.GetAutomationId(button) != MainPageCatalog.DockAutomationId(page)) problems.Add(page + ":automationIdMismatch");
+                    if (button.Template == null) problems.Add(page + ":noTemplate");
+                    if (button.Content == null) problems.Add(page + ":noContent");
+                }
+
+                bool capsuleOk = navWin.DockCapsule != null &&
+                                 Math.Abs(navWin.DockCapsule.Width - MainWindow.DockWidthDip) < 0.001 &&
+                                 Math.Abs(navWin.DockCapsule.Height - MainWindow.DockHeightDip) < 0.001 &&
+                                 Math.Abs(navWin.DockCapsule.Margin.Bottom - 14.0) < 0.001 &&
+                                 Math.Abs(navWin.DockCapsule.CornerRadius.TopLeft - 22.0) < 0.001;
+                if (!capsuleOk) problems.Add("dockCapsuleGeometryChanged");
+
+                bool nav01 = problems.Count == 0;
+                items.Add(new SelfTestItem
+                {
+                    Id = "NAV-01",
+                    Category = "Windows",
+                    Description = "Dock 四项结构契约（可聚焦 Button / Tab / 无障碍名称与 ID / 胶囊几何未变）",
+                    Passed = nav01,
+                    Detail = nav01
+                        ? string.Format("四项均为 Button 且 Focusable+IsTabStop，Name/AutomationId 齐备；胶囊 {0}×{1} bottom14 r22 未变",
+                            MainWindow.DockWidthDip, MainWindow.DockHeightDip)
+                        : string.Join(";", problems.ToArray())
+                });
+            }
+            catch (Exception ex)
+            {
+                items.Add(new SelfTestItem
+                {
+                    Id = "NAV-01",
+                    Category = "Windows",
+                    Description = "Dock 四项结构契约",
+                    Passed = false,
+                    Detail = ex.Message
+                });
+            }
+
+            // NAV-02: 导航状态机——默认概览、唯一选中、重复点击不重建、页面实例复用
+            try
+            {
+                var navWin = new MainWindow();
+                MainPage[] pages = MainPageCatalog.All();
+                var problems = new List<string>();
+
+                if (navWin.CurrentPage != MainPage.Overview) problems.Add("defaultPage=" + navWin.CurrentPage);
+                if (!ReferenceEquals(navWin.ContentHost.Content, navWin.PageView(MainPage.Overview))) problems.Add("overviewNotBoundOnStartup");
+
+                var instances = new Dictionary<MainPage, UIElement>();
+                foreach (MainPage page in pages)
+                {
+                    bool changed = navWin.NavigateTo(page);
+                    if (page == MainPage.Overview)
+                    {
+                        if (changed) problems.Add("firstOverviewCallReportedChange");
+                    }
+                    else if (!changed)
+                    {
+                        problems.Add(page + ":navigateReportedNoChange");
+                    }
+
+                    if (navWin.CurrentPage != page) problems.Add(page + ":currentPageMismatch");
+                    if (!ReferenceEquals(navWin.ContentHost.Content, navWin.PageView(page))) problems.Add(page + ":hostContentMismatch");
+
+                    int itemStatusSelected = 0;
+                    foreach (MainPage probe in pages)
+                    {
+                        if (AutomationProperties.GetItemStatus(navWin.DockButton(probe)) == MainPageCatalog.ItemStatusSelected) itemStatusSelected++;
+                    }
+                    if (itemStatusSelected != 1) problems.Add(page + ":itemStatusSelected=" + itemStatusSelected);
+                    if (navWin.SelectedDockItemCount() != 1) problems.Add(page + ":selectedDockItems=" + navWin.SelectedDockItemCount());
+                    if (Math.Abs(navWin.DockSelectionDot(page).Opacity - 1.0) > 0.001) problems.Add(page + ":selectionDotHidden");
+
+                    instances[page] = navWin.PageView(page);
+                }
+
+                // 重复点击当前项：不重建内容、不重置状态
+                MainPage current = navWin.CurrentPage;
+                object boundBefore = navWin.ContentHost.Content;
+                bool repeatChanged = navWin.NavigateTo(current);
+                if (repeatChanged) problems.Add("repeatClickReportedChange");
+                if (!ReferenceEquals(boundBefore, navWin.ContentHost.Content)) problems.Add("repeatClickRebuiltContent");
+
+                // 来回切换后仍是同一批页面实例
+                navWin.NavigateTo(MainPage.Overview);
+                navWin.NavigateTo(MainPage.Settings);
+                foreach (MainPage page in pages)
+                {
+                    if (!ReferenceEquals(instances[page], navWin.PageView(page))) problems.Add(page + ":pageInstanceReplaced");
+                }
+
+                bool nav02 = problems.Count == 0;
+                items.Add(new SelfTestItem
+                {
+                    Id = "NAV-02",
+                    Category = "Windows",
+                    Description = "导航状态机（默认概览 / 唯一选中 / 重复点击不重建 / 页面实例复用）",
+                    Passed = nav02,
+                    Detail = nav02
+                        ? "四页往返切换：CurrentPage、_contentHost 内容实例、唯一 ItemStatus=已选中 全部一致；重复点击当前项返回 false 且内容实例不变"
+                        : string.Join(";", problems.ToArray())
+                });
+            }
+            catch (Exception ex)
+            {
+                items.Add(new SelfTestItem
+                {
+                    Id = "NAV-02",
+                    Category = "Windows",
+                    Description = "导航状态机",
+                    Passed = false,
+                    Detail = ex.Message
+                });
+            }
+
+            // NAV-03: 页面空态契约——各自标题、无虚构电量数字、设置页无可操作控件
+            try
+            {
+                var navWin = new MainWindow();
+                MainPage[] pages = MainPageCatalog.All();
+                var problems = new List<string>();
+                string[] forbidden = { "0%", "100%", "电量 " };
+
+                foreach (MainPage page in pages)
+                {
+                    TextBlock title = navWin.PageTitleText(page);
+                    if (title == null) { problems.Add(page + ":noTitle"); continue; }
+                    if (title.Text != MainPageCatalog.Title(page)) problems.Add(page + ":titleMismatch=" + title.Text);
+                    if (AutomationProperties.GetAutomationId(title) != MainPageCatalog.PageTitleAutomationId) problems.Add(page + ":titleAutomationId");
+
+                    List<string> lines = navWin.PageEmptyStateLines(page);
+                    if (lines == null || lines.Count < 2) { problems.Add(page + ":emptyStateTooThin"); continue; }
+                    foreach (string line in lines)
+                    {
+                        if (string.IsNullOrEmpty(line) || line.Trim().Length == 0) problems.Add(page + ":blankEmptyStateLine");
+                        foreach (string bad in forbidden)
+                        {
+                            if (line.IndexOf(bad, StringComparison.Ordinal) >= 0) problems.Add(page + ":fabricatedValue:" + bad);
+                        }
+                    }
+                }
+
+                int interactive = CountInteractiveControls(navWin.PagePanel(MainPage.Settings));
+                if (interactive != 0) problems.Add("settingsPageInteractiveControls=" + interactive);
+
+                bool nav03 = problems.Count == 0;
+                items.Add(new SelfTestItem
+                {
+                    Id = "NAV-03",
+                    Category = "Windows",
+                    Description = "页面空态契约（四页标题 / 无虚构电量数字 / 设置页无可操作控件）",
+                    Passed = nav03,
+                    Detail = nav03
+                        ? "四页各有标题与空态文案，全文不含 0%/100%/电量数字；设置页子树上交互控件计数=0"
+                        : string.Join(";", problems.ToArray())
+                });
+            }
+            catch (Exception ex)
+            {
+                items.Add(new SelfTestItem
+                {
+                    Id = "NAV-03",
+                    Category = "Windows",
+                    Description = "页面空态契约",
+                    Passed = false,
+                    Detail = ex.Message
+                });
+            }
+
             // WIDGET-01: 挂件三档规格（173×173/362×173/362×362 DIP）、100%/150% DPI 量测无溢出与离线/截断
             try
             {
@@ -968,6 +1154,30 @@ namespace PowerDock.App.Diagnostics
         {
             if (string.IsNullOrEmpty(s)) return string.Empty;
             return s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "").Replace("\n", " ");
+        }
+
+        /// <summary>
+        /// 数的是「呈现为可操作」的控件：未实现的功能不得出现在设置页（AGENTS.md §6.4.1）。
+        /// </summary>
+        private static int CountInteractiveControls(DependencyObject root)
+        {
+            if (root == null) return 0;
+
+            int count = 0;
+            if (root is Button || root is System.Windows.Controls.Primitives.ToggleButton ||
+                root is CheckBox || root is RadioButton || root is ComboBox ||
+                root is TextBox || root is PasswordBox || root is Slider)
+            {
+                count++;
+            }
+
+            int children = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < children; i++)
+            {
+                count += CountInteractiveControls(System.Windows.Media.VisualTreeHelper.GetChild(root, i));
+            }
+
+            return count;
         }
     }
 }

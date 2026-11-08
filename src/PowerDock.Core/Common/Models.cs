@@ -123,6 +123,28 @@ namespace PowerDock.Core.Common
         }
     }
 
+    /// <summary>
+    /// 历史电量采样点，用于近 7 天趋势呈现与持久化（AGENTS.md §5.3）。
+    /// </summary>
+    public sealed class BatterySample
+    {
+        public DeviceKey Key { get; private set; }
+        public DateTime TsUtc { get; private set; }
+        public int Percent { get; private set; }
+        public bool? Charging { get; private set; }
+        public BatterySource Source { get; private set; }
+
+        public BatterySample(DeviceKey key, DateTime tsUtc, int percent, bool? charging, BatterySource source)
+        {
+            if (key == null) throw new ArgumentNullException("key");
+            Key = key;
+            TsUtc = tsUtc;
+            Percent = percent;
+            Charging = charging;
+            Source = source;
+        }
+    }
+
     public sealed class DeviceState
     {
         public DeviceKey Key { get; private set; }

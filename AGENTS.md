@@ -4,7 +4,7 @@
 每收到一次需求变更，先更新本文件，再动代码。**不接受只改代码不改文档。**
 
 - 最后更新：2026-11-08
-- 当前阶段：**S1 采集**（S0 外壳已合入 `origin/main` `e99fea3`；S1 按 WMI → HID → BLE 顺序接入，本轮先落「设备身份 / 链路 / 在线状态 / 电量来源」契约，再分 PR 接入 HID 与 BLE，最后接真实应用路径）
+- 当前阶段：**S2 界面（进行中）· 概览页与四页并行集成**（主窗口四页切片：概览页方案 A、设备管理页、组件页、设置页四页并行开发，集成人独占外壳接线与导航状态机；基线已合入 PR #9 与 PR #13）
 - 需求与工程基线：`docs/设计方案-v0.1.md`
 - S1 验收判据：`docs/验收清单-v0.1-S1-采集.md`（判据文档，不代表已通过）
 - UI 参考：`docs/mockup/index.html`、`style.css`、`app.js`（方案 A）及 `docs/mockup/README.md`。验收规格以 §2.1 和 §6 为准。
@@ -35,9 +35,10 @@ Windows 桌面电量中心（对外名 **PowerDock**，仓库名 BatteryManageme
 | `docs/mockup/`（HTML 还原稿） | 是（方案 A，含双主题与可交互主窗口） | 是（`1f6b6d3`） | 否（已知原型差异见 §2.1） |
 | `src/PowerDock.Core` | 是（`net10.0` SDK 工程：Models / Logger / IDeviceProvider / Storage；State、Scheduling、Alerts 尚未建立） | 是（`dcf1c4f`） | 否 |
 | `src/PowerDock.App` | 是（`net10.0-windows` WPF 工程：Program / App / Diagnostics / Interop / Shell / Windows） | 是（`dcf1c4f`） | 否 |
+| 主窗口底部 Dock 导航与四页空态（`Windows/MainWindow.cs`、`Windows/MainPage*.cs`、`Windows/DockItemFactory.cs`） | 是（四项改可聚焦 `Button`，同一导航状态切 `_contentHost`，四页空态） | 是（PR #9） | 否（真实鼠标/键盘与 100% DPI 待交互桌面复验，见 `docs/验证记录-v0.1-S0-主窗口导航.md`） |
 | `build.ps1` / `pack.ps1` | 是（`dotnet build` / `dotnet publish` 自包含未裁剪单文件，自带 SDK 探测） | 是（`dcf1c4f`） | 否（包体已测，可接受上限尚未确认，见 D16） |
 | `tests/PowerDock.Core.Tests` | 是（xunit；95 条用例全部通过：覆盖解析、调度、存储、回滚与挂件三档截断/排序契约；测试工程 `net10.0-windows`） | 部分 | 否（`S0-STORE-02` 已通过，仅剩满盘/ENOSPC 子项，见验收矩阵 §3.3） |
-| `--self-test` 自检 | 是（16 项；含 WIDGET-01 挂件三档/DPI量测自检；本机 16/16 通过） | 否（14项随 `dcf1c4f` 合入，WIDGET-01 本轮新增） | 否（仅本机单轮，未做跨机与多轮） |
+| `--self-test` 自检 | 是（19 项；含 NAV-01..03 与 WIDGET-01；本机 19/19 通过） | 部分（14项随 `dcf1c4f`，NAV 三项随 PR #9，WIDGET-01 本轮新增） | 否（仅本机单轮，未做跨机与多轮） |
 | 设计稿 | 否（画板 02 圆角标注待复核；HTML 组件页预览沿用 r8，见 §2.1 C3） | — | 否 |
 
 ### 2.1 文档冲突裁决（以本表为准，遇到旧文冲突不许自行选择）
@@ -95,6 +96,7 @@ Windows 桌面电量中心（对外名 **PowerDock**，仓库名 BatteryManageme
 | D16 | 运行时与分发 | **.NET 10 LTS + WPF，S0 用 win-x64 验证未裁剪的自包含单文件** | .NET 8 于 2026-11-10 结束支持，WPF SDK 禁用裁剪。4.8 仅保留为需重新评审的选项。实际包体、运行时解包与可接受上限在 S0 确认 | 11-08 |
 | D17 | 聚合身份 | 持久化的物理设备键 + 独立来源键 | 同一设备换路径可保留别名与历史；只有可信关联才合并，避免把同型号设备混成一台 | 11-08 |
 | D18 | 分发包体上限 | **接受未裁剪自包含基线：exe 165.05 MB / zip 66.02 MB**；`PublishTrimmed=false`（WPF 禁裁剪）保持不变 | 实测值与 D16 基线一致；压缩杠杆 `EnableCompressionInSingleFile` 暂不启用（体积降、每次启动多一次解压，首帧预算需重测） | 11-08 |
+| D19 | 主窗口导航控件与状态 | **Dock 四项用 WPF `Button`**（`IsTabStop`/`Focusable`，`AutomationProperties.Name`+`AutomationId`，选中态另走 `ItemStatus`）；**不用 `TextBlock`+`Cursors.Hand`**。切页 = 缓存页面实例、只换 `_contentHost.Content`，重复点击当前项不重建；每页 `ScrollViewer` 偏移显式保存/恢复 | `TextBlock` 没有 Click 路由、没有焦点、没有无障碍语义，用户点不动也 Tab 不到——这是 e99fea3 的实测缺陷。`Button` 自带键盘激活（Space 原生、Enter 显式补）与 UIA Invoke，外部可验证 | 11-08 |
 
 依据：[.NET 支持周期](https://dotnet.microsoft.com/en-us/platform/support/policy)、[WPF 裁剪限制](https://learn.microsoft.com/en-us/dotnet/core/deploying/trimming/incompatibilities#wpf)、[DWM 背景能力](https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/ne-dwmapi-dwm_systembackdrop_type)。
 
@@ -342,15 +344,42 @@ Dock 浮在内容之上，所以内容区底部留 84 给它让位；不留就�
 - 内容区固定不流式：卡片四列、状态带四格、8 台柱状条都按像素对齐，拉伸会错位；小屏整体缩放而不是重排。
 - 标题栏的计数与列表同源，不允许出现「标题 6 台、列表 5 行」。
 
+#### 6.4.1 导航实现口径与阶段边界（D19，本 PR 的验收面）
+
+| 维度 | 本 PR 的口径 | 不在本 PR 范围 |
+| --- | --- | --- |
+| 控件 | 四项 = `Button`（`Focusable`/`IsTabStop`/`Cursor=Hand`/透明无边框模板）：文字、图标、按钮内部留白同一命中矩形；`AutomationProperties.Name` = 概览/设备/组件/设置，`AutomationId` = `PowerDock.Dock.<Page>` | 快捷键加速器、右键菜单、拖拽重排 |
+| 命中区 | 按钮自身矩形 100% 可点（模板根 `Border` 铺满并绑 `Background`，含 `Padding`）；选中态另有 3px 圆点，圆点不承担命中 | Dock 之外的入口（托盘菜单已由外壳负责） |
+| 键盘 | `Tab` 依次聚焦四项，焦点环用模板 `IsKeyboardFocused` 触发器绘制（accent 1.5px 描边，可见性由窗口内位图直出验证）；`Space` 走 WPF `Button` 原生，`Enter` 由 `PreviewKeyDown` 显式补 | 方向键在 Dock 内环绕导航 |
+| 状态 | 单一 `CurrentPage`；任意时刻恰好一项 `ItemStatus=已选中`；默认 `Overview`；重复点击当前项直接返回（不重建内容、不重置状态） | 页面内的设备勾选、别名、尺寸选择（S2） |
+| 切页 | 只替换 `_contentHost.Content`，页面实例缓存复用；每页 `ScrollViewer` 的垂直偏移在切出时保存、切入时恢复；不重开窗口 | 页面间转场动效（S2） |
+| 页面内容 | 四页各自标题 + 明确空态。概览/设备给「检查蓝牙 / 配对设备」指引；组件页说明挂件未实现；设置页以只读文本列出外壳已接通项（自启、关闭行为），**不出现可操作开关** | 状态带真实数值、设备卡、挂件预览、设置开关（S2/S3） |
+| 不改动 | Dock 胶囊几何（宽 360 / 高 44 / bottom 14 / r22）、窗口 880×600 r8、Acrylic 链路、标题栏拖动/最小化/关闭/托盘恢复 | 上述几何与外壳行为的任何调整 |
+
+#### 6.4.2 四页并行集成与生命周期契约（S2 集成基线）
+
+- **独占与分工**：集成人（本会话）独占 `MainWindow.cs`、`MainWindow.DeviceContent.cs`、`App.cs` 及全局公共接线；各单页对话分别只负责各自页面内部视图，不得私改外壳窗口代码。
+- **公共注册与生命周期**：各页沿用 `MainPage`、`MainPageContentFactory` 与 `MainWindow.ReplacePageContent(page, view)` 契约。每页只在挂载初始化时注册一次；**严禁在采集或设置回调中直接改写 `_contentHost.Content`**，切页与内容呈现唯一由 `MainWindow` 导航状态机统一调度。
+- **状态与存储唯一性**：统一消费 `AcquisitionHost` 广播的同一份 `IReadOnlyList<DeviceState>` 快照与单例 `SettingsStore`，严禁每页私建采集器或设置副本。
+- **跨页定位契约**：概览页点击设备列或焦点卡，调用主窗口切至设备页并定位对应设备。与设备页负责人对齐：设备页提供 `SelectAndScrollToDevice(DeviceKey key)`（及 string key 重载）。
+
 ### 6.5 四个页面
 
-**概览：结论 → 焦点 → 全貌**
+**概览：结论 → 焦点 → 全貌（方案 A 规格）**
 
-1. **状态带**四格：需充电（唯一红格）/ 充电中 / 在线 N/8 / 在组件 N/8。
-2. **焦点**：左「最需要关注」一台（大数字 + 近 7 天柱状趋势，断连留 3px 短桩）；右「另外两台 + 其余 N 台汇总」。
-3. **全貌**：8 台排成一条柱状条 + 基线，点任一列跳设备页（只跳转，不改值）。
-
-取舍：整屏红色不超过两处（告警格 + 最低那根柱）；趋势只给最需要关注的一台，四台都画会变成背景噪声。
+1. **状态带**四格（网格 1.5fr 1fr 1fr 1fr，gap 10）：
+   - **需充电**（告警格）：统计电量低于设置阈值（默认 20%）的在线/有读数设备数；**未知电量（null）与离线无读数设备不参与最低电量与需充电判定**。若需充电台数 > 0，采用 `ovcell--alert`（红描边 + 浅红底），否则为普通中性格；显示最低百分比与设备名称及链路。
+   - **充电中**：统计当前充电中（`IsCharging == true`）的设备数；显示首要充电设备名称与百分比；无设备充电时如实标「无设备充电中」。
+   - **在线**：显示在线设备数 / 总发现设备数（如 `7 / 8`）；副标题摘要离线或异常设备；全部在线时显示「全部设备在线」。
+   - **在组件**：显示已勾选进组件的设备数 / 总发现设备数（如 `5 / 8`）；副标题显示「上限 N 台」（由组件尺寸设置决定）。
+2. **焦点区**（双栏 1.25fr 1fr，gap 12）：
+   - **左「最需要关注」**：选取最高优先级设备（需充电 > 正在充 > 离线 > 正常最低电量），大数字（36px ExtraBold）展示百分比（缺失显示「—」）+ 设备名称 + 状态/链路/时效/阈值元数据；
+   - **7 天趋势柱状图**（7 列，周日到周六，今天高亮）：按设备读取真实历史样本（`BatterySample`）；**若无历史数据，显示明确的趋势空态提示**（不编造数据）；断连缺桶显示 3px 短桩（gap），连线不插值；按阈值上色（<20 危险红、20–40 警示橙、其余中性）。
+   - **右「另外 2 台要注意」**：最多展示另外 2 台需留意设备（充电中、离线或次低电量），单行包含链路图标 + 设备名称 + 状态/电量；第 3 行汇总「其余 N 台 · 正常 · 最低 M%」；底部标注「全部 N 台见『设备』页」。
+3. **全貌**（底部设备柱状条）：
+   - 横向等宽排列全部设备柱状条（基线 1px track，高度根据百分比在 72px 内缩放）；柱顶显示百分比（danger/warn/ok/off 语义色），柱底显示设备名称；
+   - **点击交互**：点击任一设备柱，触发 `SelectAndScrollToDevice` 并切至「设备管理」页定位该设备。
+4. **全局空态**：当快照为空（0 台设备）时，展示居中空态指引（「未发现设备」，引导检查蓝牙与系统配对），绝不虚构 0%。
 
 **设备管理**：4 列卡片网格。每张卡 = 勾选圆点（右上）+ 链路图标与名称 + 大字百分比 + 电量条 + 脚注
 （`在组件中 · 2.4G HID` / `未显示 · 蓝牙 GATT` / `离线 · 6 分钟前`）。
@@ -448,6 +477,11 @@ Dock 浮在内容之上，所以内容区底部留 84 给它让位；不留就�
   但抓到的像素是固定值 `(140,148,141)`、自建纯色窗口不出现、`FG_SET_OK=False`。
   任何像素证据必须先过「已知纯色窗口抓屏对照」；对照不通过则整张像素证据作废，
   改用窗口内自绘/位图直出（例：托盘图标直接调 `RenderBitmap` 取 alpha 剖面，而不是截任务栏）。
+- **`PowerDock.dll` 哈希只对同一构建目录稳定，跨目录不可复现**：2026-11-08 实测同一提交 `a52a650`
+  在主工作树得 `DD5BC173…`、在全新 worktree 得 `6A8CB390…`，字节数相同（142,848）但内容不同；
+  同一目录内连续重建 + `clean` 重建共四次则完全一致。差异来自构建路径被嵌入产物（PDB/资源路径），
+  **不是代码差异**。因此：产物身份用于「同一目录内的前后对照」；跨机器/跨目录复验请用行为与自检证据，
+  不要用 dll 哈希判「是不是同一份代码」。
 
 ## 10. 命令（S0 起可用）
 
@@ -483,6 +517,10 @@ S0 状态（2026-11-08，口径同 §2）：骨架代码、`build.ps1`/`pack.ps1
 **PR 已合并=否**（PR-S0-01 起进入 `origin/main`）；**验收已通过=否**。
 出口条件中「常规二启、并发二启、置前拒绝均可验证」与「无 SDK 目标机可启动」仍需独立复验，
 本机只记录了包体、解包行为与单轮自检结果，见 `docs/验证记录-v0.1-S0-NET10工程基线.md`。
+
+主窗口导航（D19）**不属于任一阶段的整段交付**：它是 S2「主窗口四页」的最小可交互切片，为修复 e99fea3 的
+「Dock 点击无响应」缺陷而单独落地。阶段边界见 §6.4.1——本切片只做导航与空态，不引入任何采集数据、
+不引入挂件、不引入设置操作项；S1 采集与 S2 其余内容的排期不变。
 
 ## 12. 质量指标
 
@@ -557,5 +595,7 @@ S0 状态（2026-11-08，口径同 §2）：骨架代码、`build.ps1`/`pack.ps1
 | 2026-11-08 | 所有者确认包体上限（D18：165.05 MB exe / 66.02 MB zip，未裁剪自包含基线）；§14 待确认项 2 相应更新 |
 | 2026-11-08 | PR-S0-05 解锁复测：抓屏纯色对照通过；Acrylic 透射 slope=0.02939/R²=0.9887（NONE 对照 0.07843/R²=1.0000），S0-WIN-03 仍按 0.0784 判据未验证；S0-WIN-04（真实 EnableTransparency=0 + 九档像素恒 22）与 S0-FIRSTFRAME-01（368.10ms）改通过；修复 AppSettings.MinimizeToTrayOnClose 未绑定到主窗口的缺口。 |
 | 2026-11-08 | S1 采集契约：§2.1 新增 C8/C9/C10（C8 作废「顶层 HidP_GetCaps 未命中即无电量」判据，改查 Input/Feature 值能力；C9 删除托盘固定 100%，未知不补值；C10 蓝牙配对与连接分开记录）；P0-1 补「先身份/链路/在线，再电量」；§5.3.1 新增 LinkKind/OnlineState/PercentUnavailableReason/DeviceIdentity/LinkInfo 与四条硬约束（四判断独立、USB 父节点只是总线证据、三态判据、电量原因必填）；§11 S1 状态改为进行中。 |
+| 2026-11-08 | 修复 e99fea3「底部 Dock 点击无响应」：Dock 四项由 `TextBlock`+`Cursors.Hand` 改为可聚焦 `Button`（D19），新增 §6.4.1 导航实现口径与阶段边界、§2 状态表对应行、§11 阶段归属说明；新增 `Windows/MainPage.cs`、`Windows/MainPageContentFactory.cs`、`Windows/DockItemFactory.cs`，`MainWindow` 增加统一导航状态与四页空态；`--self-test` 增加 NAV-01..03，新增 `--diagnose-dock-nav` 实窗交互诊断（后扩为 9 步，含快速连点滚动竞态 NAV-DIAG-09）。 |
+| 2026-11-08 | S2 概览页与四页并行集成契约：新增 §6.4.2 确立集成人独占接线与四页生命周期契约（ReplacePageContent/共享快照/禁止直接替换_contentHost）、§6.5 细化概览四格状态带计算与未知值过滤、焦点区7天趋势与空态、全量柱状条点击定位对齐 SelectAndScrollToDevice。 |
 | 2026-11-08 | S2 组件页契约（feat/s2-widgets-page）：§5.3.0 锁定组件勾选字段 AppSettings.WidgetDevices 与三态独立性（勾选/置顶/忽略互不影响，旧配置缺字段自动补空列表兼容）；§6.5 细化组件页 1:1 预览（173×173/362×173/362×362 DIP）、三档切换不丢勾选、已勾选离线设备半透明显示「—」、SettingsStore 失败回滚反馈；约定 MainWindow.WidgetsContent 专属挂载点与 WidgetRowItem 投影复用契约。 |
 

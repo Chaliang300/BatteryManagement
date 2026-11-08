@@ -1,10 +1,13 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 using PowerDock.App.Diagnostics;
 using PowerDock.App.Interop;
 using PowerDock.App.Shell;
@@ -17,6 +20,8 @@ namespace PowerDock.App.Windows
         public const double TargetWidthDip = 880.0;
         public const double TargetHeightDip = 600.0;
         public const double TitleBarHeightDip = 44.0;
+        public const double DockWidthDip = 360.0;
+        public const double DockHeightDip = 44.0;
 
         private Border _rootSurface;
         private WindowBackdropController _backdrop;
@@ -26,8 +31,22 @@ namespace PowerDock.App.Windows
         private Border _bottomDock;
         private TextBlock _titleText;
 
+        private readonly Dictionary<MainPage, DockItemVisual> _dockItems = new Dictionary<MainPage, DockItemVisual>();
+        private readonly Dictionary<MainPage, MainPageVisual> _pages = new Dictionary<MainPage, MainPageVisual>();
+        private readonly Dictionary<MainPage, double> _savedScrollOffsets = new Dictionary<MainPage, double>();
+        // 外部注入的页内容（采集层挂载的设备视图）。空态是默认内容，被覆盖后仍然只在这一页生效。
+        private readonly Dictionary<MainPage, UIElement> _pageOverrides = new Dictionary<MainPage, UIElement>();
+        private MainPage _currentPage = MainPage.Overview;
+        private bool _contentBound;
+
         public bool MinimizeToTrayOnClose { get; set; }
         public TrayIconService TrayService { get; set; }
+
+        /// <summary>任意时刻唯一可见页。Dock 选中态与 _contentHost 都由它派生（D19）。</summary>
+        public MainPage CurrentPage
+        {
+            get { return _currentPage; }
+        }
 
         public MainWindow()
         {
@@ -124,38 +143,19 @@ namespace PowerDock.App.Windows
             var contentContainer = new Grid();
             _contentHost = new ContentControl
             {
-                Margin = new Thickness(18, 16, 18, 84) // 底部留 84 DIP 为 Dock 让位 (AGENTS.md §6.4)
+                Margin = new Thickness(18, 16, 18, 84), // 底部留 84 DIP 为 Dock 让位 (AGENTS.md §6.4)
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                VerticalContentAlignment = VerticalAlignment.Stretch
             };
-
-            var placeholder = new StackPanel
-            {
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            placeholder.Children.Add(new TextBlock
-            {
-                Text = "PowerDock S0 工程底座就绪",
-                Foreground = new SolidColorBrush(Color.FromRgb(107, 166, 255)), // --accent
-                FontSize = 18,
-                FontWeight = FontWeights.Bold,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 0, 0, 8)
-            });
-            placeholder.Children.Add(new TextBlock
-            {
-                Text = "单实例互斥 · 命名管道唤醒 · 注册表自启 · 三格托盘 · DWM Acrylic 880×600",
-                Foreground = new SolidColorBrush(Color.FromArgb(180, 255, 255, 255)),
-                FontSize = 12,
-                HorizontalAlignment = HorizontalAlignment.Center
-            });
-            _contentHost.Content = placeholder;
+            AutomationProperties.SetAutomationId(_contentHost, MainPageCatalog.ContentHostAutomationId);
+            AutomationProperties.SetName(_contentHost, "PowerDock 内容区");
             contentContainer.Children.Add(_contentHost);
 
             // 3. 底部居中浮动 Dock 胶囊 (bottom 14, AGENTS.md §6.4)
             _bottomDock = new Border
             {
-                Width = 360,
-                Height = 44,
+                Width = DockWidthDip,
+                Height = DockHeightDip,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Bottom,
                 Margin = new Thickness(0, 0, 0, 14),
@@ -171,19 +171,28 @@ namespace PowerDock.App.Windows
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
             };
-            dockStack.Children.Add(CreateDockItem("▣ 概览", true));
-            dockStack.Children.Add(CreateDockItem("☰ 设备", false));
-            dockStack.Children.Add(CreateDockItem("▤ 组件", false));
-            dockStack.Children.Add(new Border
-            {
-                Width = 1,
-                Height = 16,
-                Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
-                Margin = new Thickness(8, 0, 8, 0)
-            });
-            dockStack.Children.Add(CreateDockItem("⚙ 设置", false));
-            _bottomDock.Child = dockStack;
 
+            foreach (MainPage page in MainPageCatalog.All())
+            {
+                DockItemVisual item = DockItemFactory.Create(page);
+                item.Button.Click += OnDockItemClick;
+                _dockItems[page] = item;
+                dockStack.Children.Add(item.Button);
+
+                // 分隔线固定落在「组件」与「设置」之间（AGENTS.md §6.4）
+                if (page == MainPage.Widgets)
+                {
+                    dockStack.Children.Add(new Border
+                    {
+                        Width = 1,
+                        Height = 16,
+                        Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
+                        Margin = new Thickness(8, 0, 8, 0)
+                    });
+                }
+            }
+
+            _bottomDock.Child = dockStack;
             contentContainer.Children.Add(_bottomDock);
 
             Grid.SetRow(contentContainer, 1);
@@ -191,6 +200,15 @@ namespace PowerDock.App.Windows
 
             _rootSurface.Child = _mainGrid;
             Content = _rootSurface;
+
+            // 四页实例一次性建好并被缓存：切页只换引用，不重建（D19「保留页面状态」）。
+            foreach (MainPage page in MainPageCatalog.All())
+            {
+                _pages[page] = MainPageContentFactory.Create(page);
+            }
+
+            // 默认进入概览
+            NavigateTo(MainPage.Overview);
         }
 
         private Button CreateCaptionButton(string symbol, string tooltip, RoutedEventHandler onClick)
@@ -212,17 +230,147 @@ namespace PowerDock.App.Windows
             return btn;
         }
 
-        private TextBlock CreateDockItem(string label, bool selected)
+        private void OnDockItemClick(object sender, RoutedEventArgs e)
         {
-            return new TextBlock
+            Button button = sender as Button;
+            if (button == null)
             {
-                Text = label,
-                Foreground = selected ? new SolidColorBrush(Color.FromRgb(107, 166, 255)) : new SolidColorBrush(Color.FromArgb(160, 255, 255, 255)),
-                FontSize = 12,
-                FontWeight = selected ? FontWeights.SemiBold : FontWeights.Normal,
-                Margin = new Thickness(12, 0, 12, 0),
-                Cursor = Cursors.Hand
-            };
+                return;
+            }
+
+            foreach (KeyValuePair<MainPage, DockItemVisual> pair in _dockItems)
+            {
+                if (ReferenceEquals(pair.Value.Button, button))
+                {
+                    NavigateTo(pair.Key);
+                    return;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 统一导航入口。重复点击当前页直接返回：不重建页面、不重置滚动偏移、不打断页内状态。
+        /// </summary>
+        /// <returns>内容是否真的换了页。</returns>
+        public bool NavigateTo(MainPage page)
+        {
+            MainPageVisual target;
+            if (!_pages.TryGetValue(page, out target))
+            {
+                throw new ArgumentOutOfRangeException("page");
+            }
+
+            if (_contentBound && page == _currentPage)
+            {
+                return false;
+            }
+
+            SaveScrollOffset(_currentPage);
+
+            _currentPage = page;
+            _contentHost.Content = target.Scroll;
+            RestoreScrollOffset(page);
+            UpdateDockSelection();
+            _contentBound = true;
+            return true;
+        }
+
+        private void UpdateDockSelection()
+        {
+            foreach (MainPage page in MainPageCatalog.All())
+            {
+                DockItemVisual item;
+                if (!_dockItems.TryGetValue(page, out item))
+                {
+                    continue;
+                }
+
+                bool selected = page == _currentPage;
+                item.SelectionDot.Opacity = selected ? 1.0 : 0.0;
+                Brush foreground = selected ? DockItemFactory.SelectedForeground() : DockItemFactory.UnselectedForeground();
+                item.IconText.Foreground = foreground;
+                item.LabelText.Foreground = foreground;
+                item.LabelText.FontWeight = selected ? FontWeights.SemiBold : FontWeights.Normal;
+                AutomationProperties.SetItemStatus(item.Button,
+                    selected ? MainPageCatalog.ItemStatusSelected : MainPageCatalog.ItemStatusUnselected);
+            }
+        }
+
+        /// <summary>
+        /// 用外部视图填充某一页的**内容槽**（采集层挂载设备视图走这条）。
+        /// 页标题与外部视图是两件事：外部视图只填内容槽，**不得抹掉页面标题**
+        /// （把整页面板替换掉会让 PageTitle 消失，外部验证按标题判切页就会误判）。
+        /// **导航状态机仍是 _contentHost 的唯一控制者**：只有该页当前可见时才换宿主内容，
+        /// 否则仅记账，等切到该页时再显示。这样采集回调永远不会顶掉用户正在看的页面。
+        /// </summary>
+        /// <returns>页面存在且填充成功。</returns>
+        internal bool ReplacePageContent(MainPage page, UIElement content)
+        {
+            if (content == null || !MainPageCatalog.IsDefined(page))
+            {
+                return false;
+            }
+
+            MainPageVisual visual;
+            if (!_pages.TryGetValue(page, out visual) || visual == null || visual.ContentSlot == null)
+            {
+                return false;
+            }
+
+            _pageOverrides[page] = content;
+            visual.ContentSlot.Children.Clear();
+            visual.ContentSlot.Children.Add(content);
+
+            // 空态说明只在没有真实内容时显示。
+            if (visual.EmptyStateCard != null)
+            {
+                visual.EmptyStateCard.Visibility = Visibility.Collapsed;
+            }
+
+            if (_contentBound && page == _currentPage)
+            {
+                _contentHost.Content = visual.Scroll;
+                UpdateDockSelection();
+            }
+
+            return true;
+        }
+
+        private void SaveScrollOffset(MainPage page)
+        {
+            MainPageVisual visual;
+            if (_pages.TryGetValue(page, out visual) && visual.Scroll != null)
+            {
+                _savedScrollOffsets[page] = visual.Scroll.VerticalOffset;
+            }
+        }
+
+        /// <summary>
+        /// 页面重新挂进视觉树后 extent 可能尚未就绪，先立即恢复一次，再在 Loaded 优先级纠正一次。
+        /// </summary>
+        private void RestoreScrollOffset(MainPage page)
+        {
+            MainPageVisual visual;
+            double offset;
+            if (!_pages.TryGetValue(page, out visual) || !_savedScrollOffsets.TryGetValue(page, out offset) || offset <= 0.0)
+            {
+                return;
+            }
+
+            ScrollViewer scroll = visual.Scroll;
+            scroll.UpdateLayout();
+            scroll.ScrollToVerticalOffset(offset);
+            scroll.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(delegate
+            {
+                try
+                {
+                    scroll.ScrollToVerticalOffset(offset);
+                }
+                catch (Exception ex)
+                {
+                    AppLogger.Warn("Restore scroll offset failed for page " + page + ": " + ex.Message);
+                }
+            }));
         }
 
         private void OnTitleBarMouseDown(object sender, MouseButtonEventArgs e)
@@ -299,6 +447,111 @@ namespace PowerDock.App.Windows
             return args;
         }
 
+        // ---- 诊断/自检入口（同程序集内可见）。真正的外部验证走 UIA，不依赖这些入口。 ----
+
+        internal Button DockButton(MainPage page)
+        {
+            DockItemVisual item;
+            return _dockItems.TryGetValue(page, out item) ? item.Button : null;
+        }
+
+        internal Border DockSelectionDot(MainPage page)
+        {
+            DockItemVisual item;
+            return _dockItems.TryGetValue(page, out item) ? item.SelectionDot : null;
+        }
+
+        internal TextBlock DockIconText(MainPage page)
+        {
+            DockItemVisual item;
+            return _dockItems.TryGetValue(page, out item) ? item.IconText : null;
+        }
+
+        internal TextBlock DockLabelText(MainPage page)
+        {
+            DockItemVisual item;
+            return _dockItems.TryGetValue(page, out item) ? item.LabelText : null;
+        }
+
+        internal ScrollViewer PageScrollViewer(MainPage page)
+        {
+            MainPageVisual visual;
+            return _pages.TryGetValue(page, out visual) ? visual.Scroll : null;
+        }
+
+        /// <summary>该页当前承载的内容（外部注入过就是注入视图，否则是默认空态面板）。</summary>
+        internal UIElement PageContent(MainPage page)
+        {
+            UIElement overridden;
+            if (_pageOverrides.TryGetValue(page, out overridden))
+            {
+                return overridden;
+            }
+
+            MainPageVisual visual;
+            return _pages.TryGetValue(page, out visual) ? visual.Panel : null;
+        }
+
+        /// <summary>诊断用：拿到一页的结构件（标题 / 内容槽 / 空态卡片 / ScrollViewer）。</summary>
+        internal MainPageVisual PageVisualForDiagnostics(MainPage page)
+        {
+            MainPageVisual visual;
+            return _pages.TryGetValue(page, out visual) ? visual : null;
+        }
+
+        internal Border DockCapsule
+        {
+            get { return _bottomDock; }
+        }
+
+        internal ContentControl ContentHost
+        {
+            get { return _contentHost; }
+        }
+
+        internal UIElement PageView(MainPage page)
+        {
+            MainPageVisual visual;
+            return _pages.TryGetValue(page, out visual) ? visual.Scroll : null;
+        }
+
+        internal StackPanel PagePanel(MainPage page)
+        {
+            MainPageVisual visual;
+            return _pages.TryGetValue(page, out visual) ? visual.Panel : null;
+        }
+
+        internal TextBlock PageTitleText(MainPage page)
+        {
+            MainPageVisual visual;
+            return _pages.TryGetValue(page, out visual) ? visual.TitleText : null;
+        }
+
+        internal List<string> PageEmptyStateLines(MainPage page)
+        {
+            MainPageVisual visual;
+            return _pages.TryGetValue(page, out visual) ? visual.EmptyStateLines : null;
+        }
+
+        internal int SelectedDockItemCount()
+        {
+            int count = 0;
+            foreach (MainPage page in MainPageCatalog.All())
+            {
+                if (page == _currentPage)
+                {
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        internal double SavedScrollOffset(MainPage page)
+        {
+            double offset;
+            return _savedScrollOffsets.TryGetValue(page, out offset) ? offset : 0.0;
+        }
+
         public void ActivateAndRestore()
         {
             if (!Dispatcher.CheckAccess())
@@ -328,7 +581,3 @@ namespace PowerDock.App.Windows
         }
     }
 }
-
-
-
-
