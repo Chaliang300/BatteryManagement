@@ -698,7 +698,8 @@ namespace PowerDock.App.Diagnostics
             target.RaiseEvent(args);
         }
 
-        /// <summary>把 UI 线程上已排队的低优先级工作（含恢复滚动偏移的 Loaded 回调）跑完。</summary>
+        /// <summary>
+        /// 把 UI 线程上已排队的低优先级工作（含恢复滚动偏移的 Loaded 回调）跑完。</summary>
         private static void PumpDispatcher()
         {
             var frame = new DispatcherFrame();

@@ -55,7 +55,13 @@ namespace PowerDock.App.Windows
 
         private static ControlTemplate _template;
 
-        /// <summary>只解析一次。触发器里的 TargetName 依赖模板命名范围，不能跨模板复用实例。</summary>
+        /// <summary>
+        /// 只解析一次。触发器里的 TargetName 依赖模板命名范围，不能跨模板复用实例。
+        /// 触发器顺序是**契约**：同一属性被多个触发器命中时，WPF 属性引擎让**后出现者生效**
+        /// （见 Nick Kramer 关于属性引擎的说明）。所以 <c>IsPressed</c> 必须排在
+        /// <c>IsKeyboardFocused</c> 之后；否则「已聚焦时按下」的底色会被聚焦底色吞掉，按下看不见反馈。
+        /// <c>BorderBrush</c>（焦点环）只由聚焦触发器设置，按下时焦点环与按下底色仍同时成立。
+        /// </summary>
         private static ControlTemplate Template()
         {
             if (_template == null)
@@ -72,12 +78,14 @@ namespace PowerDock.App.Windows
                     "<Trigger Property=\"IsMouseOver\" Value=\"True\">" +
                     "<Setter TargetName=\"DockSurface\" Property=\"Background\" Value=\"#1FFFFFFF\" />" +
                     "</Trigger>" +
-                    "<Trigger Property=\"IsPressed\" Value=\"True\">" +
-                    "<Setter TargetName=\"DockSurface\" Property=\"Background\" Value=\"#336BA6FF\" />" +
-                    "</Trigger>" +
                     "<Trigger Property=\"IsKeyboardFocused\" Value=\"True\">" +
                     "<Setter TargetName=\"DockSurface\" Property=\"BorderBrush\" Value=\"#FF6BA6FF\" />" +
                     "<Setter TargetName=\"DockSurface\" Property=\"Background\" Value=\"#1A6BA6FF\" />" +
+                    "</Trigger>" +
+                    // 必须排在聚焦触发器之后：同一属性被多个触发器命中时 WPF 让后出现者生效，
+                    // 否则「已聚焦时按下」的底色会被聚焦底色吞掉，按下就没有视觉反馈。
+                    "<Trigger Property=\"IsPressed\" Value=\"True\">" +
+                    "<Setter TargetName=\"DockSurface\" Property=\"Background\" Value=\"#336BA6FF\" />" +
                     "</Trigger>" +
                     "</ControlTemplate.Triggers>" +
                     "</ControlTemplate>");
