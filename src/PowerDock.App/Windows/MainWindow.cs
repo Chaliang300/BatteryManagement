@@ -252,22 +252,42 @@ namespace PowerDock.App.Windows
 
         private void OnWindowClosing(object sender, CancelEventArgs e)
         {
+            ApplyCloseBehavior(e);
+        }
+
+        /// <summary>
+        /// The single close-behavior implementation (AGENTS.md §7.6):
+        /// tray available -> cancel close and hide to tray; tray unavailable -> exit the process.
+        /// Used by Closing and by --diagnose-close* so diagnostics exercise the real path.
+        /// </summary>
+        internal void ApplyCloseBehavior(CancelEventArgs e)
+        {
             if (MinimizeToTrayOnClose && TrayService != null && TrayService.IsTrayAvailable)
             {
                 e.Cancel = true;
                 Hide();
-                AppLogger.Info("MainWindow hidden to tray.");
+                AppLogger.Info("MainWindow hidden to tray. trayAvailable=true pid=" + System.Diagnostics.Process.GetCurrentProcess().Id);
             }
             else
             {
                 // Tray unavailable: never hide into an invisible process (AGENTS.md §7.6).
-                AppLogger.Warn("Tray unavailable. MainWindow closing directly shuts down the application.");
+                e.Cancel = false;
+                AppLogger.Warn("Tray unavailable. MainWindow closing directly shuts down the application. trayAvailable=" +
+                    (TrayService != null && TrayService.IsTrayAvailable) + " pid=" + System.Diagnostics.Process.GetCurrentProcess().Id);
                 var app = Application.Current;
                 if (app != null)
                 {
                     app.Shutdown();
                 }
             }
+        }
+
+        /// <summary>Diagnostic-only entry that invokes the real close behavior on the real window.</summary>
+        internal CancelEventArgs SimulateCloseForDiagnostics()
+        {
+            CancelEventArgs args = new CancelEventArgs();
+            ApplyCloseBehavior(args);
+            return args;
         }
 
         public void ActivateAndRestore()
@@ -299,5 +319,6 @@ namespace PowerDock.App.Windows
         }
     }
 }
+
 
 

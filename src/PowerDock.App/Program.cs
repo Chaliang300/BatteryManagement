@@ -44,6 +44,14 @@ namespace PowerDock.App
                 {
                     return WindowDiagnostics.RunFirstFrame();
                 }
+                else if (cmd == "--diagnose-close-tray")
+                {
+                    return WindowDiagnostics.RunCloseBehavior(true);
+                }
+                else if (cmd == "--diagnose-close-no-tray")
+                {
+                    return WindowDiagnostics.RunCloseBehavior(false);
+                }
                 else if (cmd == "--diagnose-tray")
                 {
                     return TrayDiagnostics.Run();
@@ -73,6 +81,8 @@ namespace PowerDock.App
                     Console.WriteLine("  --diagnose-window          Report DWM backdrop HRESULTs, read-backs and staged activation");
                     Console.WriteLine("  --diagnose-window-fallback Force the static fallback branch and report it");
                     Console.WriteLine("  --diagnose-first-frame     Measure Program.Main -> first CompositionTarget.Rendering");
+                    Console.WriteLine("  --diagnose-close-tray      Exercise real close behavior with tray available (hide, stay alive)");
+                    Console.WriteLine("  --diagnose-close-no-tray   Exercise real close behavior without tray (process exit)");
                     Console.WriteLine("  --diagnose-tray-failure  Inject tray failure and verify close=>process exit (diagnostic)");
                     Console.WriteLine("  --diagnose [sec]  Run diagnostic sampling mode");
                     Console.WriteLine("  --help            Show this help text");
@@ -156,6 +166,7 @@ namespace PowerDock.App
         }
 }
 }
+
 
 
 

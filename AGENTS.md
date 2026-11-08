@@ -504,4 +504,5 @@ S0 状态（2026-11-08，口径同 §2）：骨架代码、`build.ps1`/`pack.ps1
 | 2026-11-08 | PR-S0-04 托盘规格修正：§6.8 托盘几何改为按尺寸显式表（24px 格间距 0.7→1.5；16px 显式 2.10/1.45，禁止等比缩放），并新增像素验收判据；D14「三格电池组」形态不变，仅修亚像素间距。 |
 | 2026-11-08 | PR-S0-05 窗口与材质：实现 CompositionTarget 透明合成、DWM 返回值检查/属性回读、NONE→Acrylic 分帧激活、每次显示重做帧扩展、显式静态降级；新增首帧埋点（Main→首个 Rendering）与 --diagnose-window*/--diagnose-first-frame 诊断；SYS-02 判 Win11 build>=22000；透射率判据（斜率 0.0784±容差、R²>0.95）待解锁复测。 |
 | 2026-11-08 | 所有者确认包体上限（D18：165.05 MB exe / 66.02 MB zip，未裁剪自包含基线）；§14 待确认项 2 相应更新 |
+| 2026-11-08 | PR-S0-05 解锁复测：抓屏纯色对照通过；Acrylic 透射 slope=0.02939/R²=0.9887（NONE 对照 0.07843/R²=1.0000），S0-WIN-03 仍按 0.0784 判据未验证；S0-WIN-04（真实 EnableTransparency=0 + 九档像素恒 22）与 S0-FIRSTFRAME-01（368.10ms）改通过；修复 AppSettings.MinimizeToTrayOnClose 未绑定到主窗口的缺口。 |
 

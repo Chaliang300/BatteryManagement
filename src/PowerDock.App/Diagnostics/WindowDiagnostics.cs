@@ -1,10 +1,13 @@
 ﻿using System;
+using System.ComponentModel;
 using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Threading;
 using PowerDock.App.Interop;
+using PowerDock.App.Shell;
 using PowerDock.App.Windows;
+using PowerDock.Core.Storage;
 using PowerDock.Core.Diagnostics;
 
 namespace PowerDock.App.Diagnostics
@@ -175,6 +178,137 @@ namespace PowerDock.App.Diagnostics
             }
         }
 
+        public static int RunCloseBehavior(bool trayAvailable)
+        {
+            bool pass = false;
+            string error = null;
+            bool cancel = false;
+            bool visibleAfter = true;
+            bool trayAvailableObserved = false;
+            int pid = System.Diagnostics.Process.GetCurrentProcess().Id;
+            int windowsCount = -1;
+
+            var app = new Application();
+            app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            TrayIconService tray = null;
+            MainWindow window = null;
+            app.Startup += delegate
+            {
+                try
+                {
+                    tray = trayAvailable ? new TrayIconService() : new TrayIconService(true);
+                    bool trayInit = tray.Initialize();
+                    window = new MainWindow();
+                    window.TrayService = tray;
+
+                    // Exercise the real binding path: load AppSettings and apply the value (same as App).
+                    bool settingsMinimize = true;
+                    try
+                    {
+                        SettingsStore store = new SettingsStore();
+                        store.Load();
+                        AppSettings current = store.Current ?? new AppSettings();
+                        settingsMinimize = current.MinimizeToTrayOnClose;
+                    }
+                    catch (Exception settingsEx)
+                    {
+                        AppLogger.Warn("DiagnoseClose: settings load failed, default true: " + settingsEx.Message);
+                    }
+                    window.MinimizeToTrayOnClose = settingsMinimize;
+                    app.MainWindow = window;
+                    window.Show();
+                    AppLogger.Info("DiagnoseClose: started scenario trayAvailable=" + trayAvailable + " trayInit=" + trayInit +
+                                   " settingsMinimizeToTrayOnClose=" + settingsMinimize +
+                                   " minimizeToTrayOnClose=" + window.MinimizeToTrayOnClose +
+                                   " trayServiceNull=" + (window.TrayService == null) +
+                                   " trayAvailableNow=" + (window.TrayService != null && window.TrayService.IsTrayAvailable) +
+                                   " pid=" + pid);
+
+                    var timer = new DispatcherTimer(DispatcherPriority.ContextIdle, window.Dispatcher);
+                    timer.Interval = TimeSpan.FromMilliseconds(900);
+                    timer.Tick += delegate
+                    {
+                        timer.Stop();
+                        try
+                        {
+                            trayAvailableObserved = window.TrayService != null && window.TrayService.IsTrayAvailable;
+                            windowsCount = app.Windows.Count;
+                            CancelEventArgs args = window.SimulateCloseForDiagnostics();
+                            cancel = args.Cancel;
+                            visibleAfter = window.IsVisible;
+                            bool expectedHide = window.MinimizeToTrayOnClose && (window.TrayService != null) && trayAvailableObserved;
+                            if (expectedHide)
+                            {
+                                // All three conditions true => must hide and stay alive.
+                                pass = cancel && !visibleAfter && !app.Dispatcher.HasShutdownStarted;
+                            }
+                            else
+                            {
+                                // Any condition false => the real behaviour must exit the process.
+                                pass = !cancel;
+                            }
+                            AppLogger.Info(string.Format(
+                                "DiagnoseClose: minimizeToTrayOnClose={0} trayServiceNull={1} trayAvailable={2} expectedHide={3} cancel={4} visibleAfter={5} windows={6} shutdownStarted={7} pid={8}",
+                                window.MinimizeToTrayOnClose, window.TrayService == null, trayAvailableObserved, expectedHide,
+                                cancel, visibleAfter, windowsCount, app.Dispatcher.HasShutdownStarted, pid));
+                        }
+                        catch (Exception ex)
+                        {
+                            error = ex.GetType().Name + ": " + ex.Message;
+                            pass = false;
+                        }
+                        WriteCloseReport(trayAvailable, pass, cancel, visibleAfter, trayAvailableObserved,
+                            window != null && window.MinimizeToTrayOnClose,
+                            window == null || window.TrayService == null,
+                            windowsCount, pid, error);
+                        if (window != null && window.IsVisible) { window.Close(); }
+                        if (tray != null) { try { tray.Dispose(); } catch { } }
+                        try { app.Shutdown(); } catch { }
+                    };
+                    timer.Start();
+                }
+                catch (Exception ex)
+                {
+                    error = ex.GetType().Name + ": " + ex.Message;
+                    WriteCloseReport(trayAvailable, false, false, true, false, false, true, -1, pid, error);
+                    try { app.Shutdown(); } catch { }
+                }
+            };
+
+            app.Run();
+            Console.WriteLine("[PowerDock Close-Behaviour] trayAvailable=" + trayAvailable + " pass=" + pass + " cancel=" + cancel + " visibleAfter=" + visibleAfter);
+            return pass ? 0 : 1;
+        }
+
+        private static void WriteCloseReport(bool trayAvailable, bool pass, bool cancel, bool visibleAfter, bool trayObserved, bool minimizeToTray, bool trayServiceNull, int windowsCount, int pid, string error)
+        {
+            try
+            {
+                string dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data");
+                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                var sb = new StringBuilder();
+                sb.AppendLine("{");
+                sb.AppendLine("  \"timestampUtc\": \"" + DateTime.UtcNow.ToString("o") + "\",");
+                sb.AppendLine("  \"mode\": \"close-behavior\",");
+                sb.AppendLine("  \"scenarioTrayAvailable\": " + (trayAvailable ? "true" : "false") + ",");
+                sb.AppendLine("  \"pass\": " + (pass ? "true" : "false") + ",");
+                sb.AppendLine("  \"cancel\": " + (cancel ? "true" : "false") + ",");
+                sb.AppendLine("  \"visibleAfter\": " + (visibleAfter ? "true" : "false") + ",");
+                sb.AppendLine("  \"trayAvailableObserved\": " + (trayObserved ? "true" : "false") + ",");
+                sb.AppendLine("  \"windowsCount\": " + windowsCount + ",");
+                sb.AppendLine("  \"minimizeToTrayOnClose\": " + (minimizeToTray ? "true" : "false") + ",");
+                sb.AppendLine("  \"trayServiceNull\": " + (trayServiceNull ? "true" : "false") + ",");
+                sb.AppendLine("  \"processId\": " + pid + ",");
+                sb.AppendLine("  \"error\": \"" + Escape(error) + "\"");
+                sb.AppendLine("}");
+                File.WriteAllText(Path.Combine(dir, trayAvailable ? "close-behavior-tray.json" : "close-behavior-no-tray.json"), sb.ToString(), Encoding.UTF8);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warn("WindowDiagnostics: failed to write close report: " + ex.Message);
+            }
+        }
+
         public static int RunFirstFrame()
         {
             FirstFrameTimer.Arm();
@@ -254,6 +388,10 @@ namespace PowerDock.App.Diagnostics
         }
     }
 }
+
+
+
+
 
 
 
