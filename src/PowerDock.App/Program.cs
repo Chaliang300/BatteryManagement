@@ -48,6 +48,10 @@ namespace PowerDock.App
                 {
                     return WindowDiagnostics.RunDockNavigation();
                 }
+                else if (cmd == "--diagnose-overview")
+                {
+                    return OverviewDiagnostics.Run();
+                }
                 else if (cmd == "--diagnose-first-frame")
                 {
                     return WindowDiagnostics.RunFirstFrame();
@@ -108,6 +112,7 @@ namespace PowerDock.App
                     Console.WriteLine("  --diagnose-window-fallback Force the static fallback branch and report it");
                     Console.WriteLine("  --diagnose-first-frame     Measure Program.Main -> first CompositionTarget.Rendering");
                     Console.WriteLine("  --diagnose-dock-nav        Exercise Dock hit-testing, UIA Invoke, Enter/Space and scroll retention");
+                    Console.WriteLine("  --diagnose-overview        Exercise Overview page calculations, empty state, focus card, trend, strip, and cross-page navigation");
                     Console.WriteLine("  --diagnose-close-tray      Exercise real close behavior with tray available (hide, stay alive)");
                     Console.WriteLine("  --diagnose-close-no-tray   Exercise real close behavior without tray (process exit)");
                     Console.WriteLine("  --diagnose-tray-failure  Inject tray failure and verify close=>process exit (diagnostic)");

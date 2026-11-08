@@ -60,6 +60,7 @@ namespace PowerDock.App
                     SettingsStore shellSettings = new SettingsStore();
                     shellSettings.Load();
                     AppSettings current = shellSettings.Current ?? new AppSettings();
+                    _mainWindow.Settings = shellSettings;
                     _mainWindow.MinimizeToTrayOnClose = current.MinimizeToTrayOnClose;
                     AppLogger.Info("Shell settings: MinimizeToTrayOnClose=" + _mainWindow.MinimizeToTrayOnClose +
                                    " source=" + shellSettings.FilePath);
@@ -149,13 +150,16 @@ namespace PowerDock.App
             try
             {
                 _acquisition = new AcquisitionHost(Dispatcher);
-                bool attached = _mainWindow != null && _mainWindow.AttachDeviceSummary();
+                bool overviewAttached = _mainWindow != null && _mainWindow.AttachOverview();
+                bool devicesAttached = _mainWindow != null && _mainWindow.AttachDeviceSummary();
 
                 _acquisition.Subscribe(delegate(IReadOnlyList<DeviceState> snapshot)
                 {
                     if (_mainWindow != null)
                     {
+                        _mainWindow.RenderOverview(snapshot);
                         _mainWindow.RenderDevices(snapshot);
+                        _mainWindow.UpdateTitleSummary(snapshot);
                     }
                     ApplyTraySnapshot(snapshot);
                 });
@@ -181,9 +185,9 @@ namespace PowerDock.App
                     }
                 }, TaskScheduler.Default);
 
-                if (!attached)
+                if (!overviewAttached || !devicesAttached)
                 {
-                    AppLogger.Warn("Device summary view not attached (window content host missing).");
+                    AppLogger.Warn("One or more page views not attached (window content host missing).");
                 }
             }
             catch (Exception ex)
