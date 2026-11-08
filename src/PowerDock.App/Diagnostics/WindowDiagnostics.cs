@@ -760,6 +760,88 @@ namespace PowerDock.App.Diagnostics
             RecordDockStep(steps, "NAV-DIAG-08", app.Windows.Count == 1,
                 string.Format("切页 12 次后 Application.Windows.Count={0}（期望 1）", app.Windows.Count));
 
+            // 7) 快速连点的滚动偏移竞态：两页各有可滚动内容并设不同偏移，
+            //    在「切回 A」与「再切到 B」之间不跑 Dispatcher，让 A 的 Loaded 回调与 B 的恢复交叠，
+            //    之后必须两页各自保持自己的偏移、不能互相写错。这是自查表 E2 的实测化。
+            bool raceOk = false;
+            string raceDetail;
+            MainPage pageA = MainPage.Widgets;
+            MainPage pageB = MainPage.Settings;
+            var spacerA = new Border { Height = 1400, Background = Brushes.Transparent };
+            var spacerB = new Border { Height = 1400, Background = Brushes.Transparent };
+            AutomationProperties.SetAutomationId(spacerA, "PowerDock.DiagnosticSpacerA");
+            AutomationProperties.SetAutomationId(spacerB, "PowerDock.DiagnosticSpacerB");
+            StackPanel panelA = window.PagePanel(pageA);
+            StackPanel panelB = window.PagePanel(pageB);
+            ScrollViewer scrollA = window.PageScrollViewer(pageA);
+            ScrollViewer scrollB = window.PageScrollViewer(pageB);
+            bool injectedA = false;
+            bool injectedB = false;
+            try
+            {
+                if (panelA != null && scrollA != null && panelB != null && scrollB != null)
+                {
+                    if (scrollA.ScrollableHeight <= 0) { panelA.Children.Add(spacerA); injectedA = true; }
+                    if (scrollB.ScrollableHeight <= 0) { panelB.Children.Add(spacerB); injectedB = true; }
+
+                    // 先清掉遗留的保存偏移，避免被 NAV-DIAG-07 的注入/移除污染。
+                    // 然后各自注入高元素、设定偏移、跑完 Dispatcher，让 _savedScrollOffsets 记住真实值。
+                    window.NavigateTo(pageA);
+                    window.UpdateLayout();
+                    scrollA.ScrollToVerticalOffset(200);
+                    PumpDispatcher();
+                    window.UpdateLayout();
+                    double offA = scrollA.VerticalOffset;
+
+                    window.NavigateTo(pageB);
+                    window.UpdateLayout();
+                    scrollB.ScrollToVerticalOffset(600);
+                    PumpDispatcher();
+                    window.UpdateLayout();
+                    double offB = scrollB.VerticalOffset;
+
+                    // 关键：制造交叠 —— 切回 A 后**不**跑 Dispatcher，立刻切到 B，
+                    // 此时 A 的 Loaded 级恢复回调还挂在队列里，B 的恢复也已发起。
+                    window.NavigateTo(pageA);
+                    window.UpdateLayout();
+                    window.NavigateTo(pageB);
+                    window.UpdateLayout();
+
+                    // 现在一次性跑完所有排队回调，再看两页偏移有没有被对方写坏
+                    PumpDispatcher();
+                    window.UpdateLayout();
+                    window.NavigateTo(pageA);
+                    window.UpdateLayout();
+                    PumpDispatcher();
+                    window.UpdateLayout();
+                    double afterA = scrollA.VerticalOffset;
+                    window.NavigateTo(pageB);
+                    window.UpdateLayout();
+                    PumpDispatcher();
+                    window.UpdateLayout();
+                    double afterB = scrollB.VerticalOffset;
+
+                    raceOk = offA > 0 && offB > 0 &&
+                             Math.Abs(afterA - offA) < 1.0 &&
+                             Math.Abs(afterB - offB) < 1.0;
+                    raceDetail = string.Format(
+                        "A({6}) 设 {0:F1} → 交叠后 {1:F1}；B({7}) 设 {2:F1} → 交叠后 {3:F1}；" +
+                        "容差 1.0 DIP；高元素注入 A={4} B={5}",
+                        offA, afterA, offB, afterB, injectedA, injectedB, pageA, pageB);
+                }
+                else
+                {
+                    raceDetail = "两页容器或 ScrollViewer 缺失";
+                }
+            }
+            finally
+            {
+                if (injectedA && panelA != null) { panelA.Children.Remove(spacerA); }
+                if (injectedB && panelB != null) { panelB.Children.Remove(spacerB); }
+            }
+
+            RecordDockStep(steps, "NAV-DIAG-09", raceOk, raceDetail);
+
             foreach (DockNavStep step in steps)
             {
                 if (step.Status == "failed") return false;
