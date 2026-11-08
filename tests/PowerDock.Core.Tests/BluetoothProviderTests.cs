@@ -161,13 +161,17 @@ namespace PowerDock.Core.Tests
         }
 
         [Fact]
-        public void NotifyUpdatesBatteryWithoutPolling()
+        public async Task NotifyUpdatesBatteryWithoutPolling()
         {
             var backend = new FakeBackend();
             var provider = new BluetoothDeviceProvider(backend);
             List<ProviderUpdate> updates = Capture(provider);
             provider.Start();
             backend.EmitDevices(Device("ble-4", true, true, "耳机"));
+
+            // 等待初次发现的异步读取任务结算并清空计数，专注于验证 Notify 不触发多余轮询
+            await Task.Delay(100);
+            backend.ReadCalls.Clear();
 
             backend.EmitNotify("ble-4", 42);
 

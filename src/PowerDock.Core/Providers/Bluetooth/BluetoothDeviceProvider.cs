@@ -78,6 +78,7 @@ namespace PowerDock.Core.Providers.Bluetooth
         {
             if (args == null || args.Devices == null) return;
 
+            var toRefresh = new List<ReadingKey>();
             lock (_sync)
             {
                 if (_disposed) return;
@@ -98,6 +99,12 @@ namespace PowerDock.Core.Providers.Bluetooth
                         _results[snapshot.DeviceId] = BleBatteryReadResult.Unavailable(
                             _adapterAvailable ? PercentUnavailableReason.NotProbed : PercentUnavailableReason.SourceDisabled,
                             _adapterAvailable ? "not probed yet" : _adapterDetail);
+                    }
+
+                    bool becameConnected = (isNew && snapshot.IsConnected) || (!isNew && !previous.IsConnected && snapshot.IsConnected);
+                    if (becameConnected && _adapterAvailable)
+                    {
+                        toRefresh.Add(key);
                     }
 
                     UpdateKind kind = isNew
@@ -122,6 +129,12 @@ namespace PowerDock.Core.Providers.Bluetooth
                         BleBatteryReadResult.Unavailable(PercentUnavailableReason.SourceDisabled, "removed"));
                     Raise(new ProviderUpdate(UpdateKind.Removed, key, device, ConnectionState.Offline));
                 }
+            }
+
+            // 在锁外异步发起初次电量读取，保证冷启动 10s 内出数（P0-1）
+            foreach (ReadingKey refreshKey in toRefresh)
+            {
+                Task.Run(async delegate { await RefreshAsync(refreshKey, CancellationToken.None).ConfigureAwait(false); });
             }
         }
 
