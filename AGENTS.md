@@ -1,11 +1,12 @@
-﻿# AGENTS.md
+# AGENTS.md
 
 本文件是本仓库的**协作契约**，供所有在本仓库工作的 AI agent 与开发者读取。
 每收到一次需求变更，先更新本文件，再动代码。**不接受只改代码不改文档。**
 
 - 最后更新：2026-11-08
-- 当前阶段：**S0 工程基线**（.NET 10 + WPF 的 SDK 式工程、`build.ps1`/`pack.ps1`、xunit 单测已建立，构建打包与 `--self-test` 可在本机跑通；采集与界面功能尚未开始）
+- 当前阶段：**S1 采集**（S0 外壳已合入 `origin/main` `e99fea3`；S1 按 WMI → HID → BLE 顺序接入，本轮先落「设备身份 / 链路 / 在线状态 / 电量来源」契约，再分 PR 接入 HID 与 BLE，最后接真实应用路径）
 - 需求与工程基线：`docs/设计方案-v0.1.md`
+- S1 验收判据：`docs/验收清单-v0.1-S1-采集.md`（判据文档，不代表已通过）
 - UI 参考：`docs/mockup/index.html`、`style.css`、`app.js`（方案 A）及 `docs/mockup/README.md`。验收规格以 §2.1 和 §6 为准。
 - 视觉源稿：Ardot `744804852905562`（文档记录有 7 块画板，本轮未重新核查）
 - 工程基线验证记录：`docs/验证记录-v0.1-S0-NET10工程基线.md`
@@ -50,12 +51,15 @@ Windows 桌面电量中心（对外名 **PowerDock**，仓库名 BatteryManageme
 | C5 | 电量条配色：V2 记录「全部条统一品牌色」；现行 CSS 为阈值上色 | 采用 D13：默认中性，<20 红 / 20–40 琥珀 / 充电绿覆盖 |
 | C6 | 原型点选离线设备显示「0% · 刚刚更新」 | 按 §6.7 显示「—」和最后成功读数时效。实测 0% 是有效读数，离线样例的 0 不可作为读数 |
 | C7 | 旧稿将 VT9Status 的注册表提显与 639ms 启动记录作为通用基线 | 参考项目数据仅供对照。PowerDock 单独验证托盘、首帧和 Acrylic 降级 |
+| C8 | S1 清单把「顶层 `HidP_GetCaps` 未命中 `0x06:0x20`」当成设备缺少标准电量字段 | **判据作废**。标准电量必须查 **Input 与 Feature 的值能力（`HIDP_VALUE_CAPS`）**，按报告 ID、链接集合、逻辑范围逐个匹配 `UsagePage=0x06 / Usage=0x20`；顶层集合未命中只说明电量不在顶层。清单中据此得出的「本机 HID 电量零命中」需按新判据重测 |
+| C9 | 托盘初始化写死 `100%`，S0 从未接入真实读数 | **删除固定值**。无有效读数时托盘呈现「未知」（`null`），有三态语义按 §6.7；只有读到的百分比才能进入托盘与聚合 |
+| C10 | 蓝牙「已配对」与「当前连接」被混成一个状态 | **分开记录**：配对是设备清单资格，连接是在线判据。已配对但断开仍显示为蓝牙设备，连接状态如实为离线/未知，电量不补 0 |
 
 ## 3. 需求基线
 
 | 编号 | 需求 | 验收口径 |
 | --- | --- | --- |
-| P0-1 | 设备发现与电量聚合 | 首发验证清单内、可达且暴露可读电量的已配对 BLE 设备冷启动 10s 内出数；HID 3s；本机电池 1s |
+| P0-1 | 设备发现与电量聚合 | 首发验证清单内、可达且暴露可读电量的已配对 BLE 设备冷启动 10s 内出数；HID 3s；本机电池 1s。**三条链路都必须先正确显示「是不是这台设备、走的哪条链路、在不在线」，再谈电量**；读不到电量时显示「—」并给出原因，不得省略设备 |
 | P0-2 | 托盘状态 | 三格聚合取**最低电量设备**；<20 橙、充电绿、正常白；浅色任务栏整枚反色；16/20/24/28/32px 均清晰 |
 | P0-3 | 桌面挂件 | 三档尺寸；无边框可拖动；贴边吸附 12px；不抢焦点、不进 Alt+Tab |
 | P0-4 | 低电量提醒 | 阈值默认 20%，同设备 30 分钟内不重复 |
@@ -172,6 +176,47 @@ record BatterySample(DeviceKey Key, DateTime TsUtc, int Percent, bool? Charging,
 
 归并优先使用平台容器 ID 或厂商可验证的稳定身份；名称、型号与 VID/PID 单独出现时不足以合并。
 端点路径只用于当前链路定位。身份未确认时先分开显示；确认后的别名、勾选、排序和历史均使用物理设备键。
+
+#### 5.3.1 身份、链路、在线状态、电量四者分离（S1 硬约束）
+
+```csharp
+public enum LinkKind { Bluetooth, Wireless24G, UsbWired, Internal, Unknown }
+public enum OnlineState { Online, Offline, Unknown }
+public enum PercentUnavailableReason {
+    None, NotProbed, NoStandardBatteryUsage, NoBatteryService,
+    AccessDenied, Timeout, SourceDisabled, NotSupportedByVendor
+}
+
+public sealed class DeviceIdentity {
+    DeviceKey Key;            // 物理设备：容器 ID 优先，其次厂商可验证稳定 ID，最后才用端点派生的临时键
+    bool IsContainerVerified; // 容器 ID 是否可用（不可用时界面与诊断都要标「身份未确认」）
+    string ContainerId;
+    string InstancePath;      // 仅用于当前链路定位，不得作为持久身份
+    string VendorId, ProductId;
+}
+
+public sealed class LinkInfo {
+    LinkKind Kind;
+    string Evidence;          // 识别依据原文，例如 "container:USB\VID_x&PID_y ... / HidBattery usage 0x06:0x20"
+    bool IsPaired;            // 蓝牙：已配对（设备清单资格）
+    bool IsConnected;         // 蓝牙：当前连接；USB/2.4G：接口或接收器在场
+    bool IsReceiverOnly;      // 只识别到 2.4G 接收器，外设状态未知
+    DateTime? LastSeenUtc;
+}
+```
+
+- **四个判断分别产出，不得互相推导**：配对状态、接收器/接口在场、外设在线、电量可读。任何一个为
+  「是」都不代表其余为「是」。`VidPid` 相同、名称相同、型号相同都不构成合并依据。
+- **USB 父节点只是总线证据**：有明确有线端点证据才标 `UsbWired`；有可验证接收器身份与外设关联才标 `Wireless24G`；
+  只能识别接收器时 `Kind=Wireless24G` 且 `IsReceiverOnly=true`，文案「接收器已连接，外设状态未知」；
+  仅知在 USB 总线上而不知道该设备本身是否 USB 有线时，文案「USB 设备，连接方式待确认」，`Kind=Unknown`。
+- **三态判据**（与 §6.7 对齐）：在线 = 有有效连接证据或新鲜成功读数；离线 = 明确断开，或可用来源连续 3 次
+  有效读取失败且无在线证据；未知 = 来源不可用、只有过期缓存、或从未探测成功。三态不许互相冒充。
+- **电量可读是独立结论**：`Percent != null` 才写读数；否则必须给出 `PercentUnavailableReason`，UI 显示「—」。
+  真实 `0%` 是有效读数，不得当作未知或占位。来源不可用时保留上次有效读数与 `LastSuccessfulReadingUtc` 并标过期。
+- 标准 HID 电量必须在 **Input 与 Feature 的 `HIDP_VALUE_CAPS`** 中查 `UsagePage=0x06 / Usage=0x20`，
+  按报告 ID、链接集合与逻辑范围取值（C8）。顶层集合未命中不作为「设备无电量」的判据。
+
 
 ### 5.4 数据流向
 
@@ -505,4 +550,5 @@ S0 状态（2026-11-08，口径同 §2）：骨架代码、`build.ps1`/`pack.ps1
 | 2026-11-08 | PR-S0-05 窗口与材质：实现 CompositionTarget 透明合成、DWM 返回值检查/属性回读、NONE→Acrylic 分帧激活、每次显示重做帧扩展、显式静态降级；新增首帧埋点（Main→首个 Rendering）与 --diagnose-window*/--diagnose-first-frame 诊断；SYS-02 判 Win11 build>=22000；透射率判据（斜率 0.0784±容差、R²>0.95）待解锁复测。 |
 | 2026-11-08 | 所有者确认包体上限（D18：165.05 MB exe / 66.02 MB zip，未裁剪自包含基线）；§14 待确认项 2 相应更新 |
 | 2026-11-08 | PR-S0-05 解锁复测：抓屏纯色对照通过；Acrylic 透射 slope=0.02939/R²=0.9887（NONE 对照 0.07843/R²=1.0000），S0-WIN-03 仍按 0.0784 判据未验证；S0-WIN-04（真实 EnableTransparency=0 + 九档像素恒 22）与 S0-FIRSTFRAME-01（368.10ms）改通过；修复 AppSettings.MinimizeToTrayOnClose 未绑定到主窗口的缺口。 |
+| 2026-11-08 | S1 采集契约：§2.1 新增 C8/C9/C10（C8 作废「顶层 HidP_GetCaps 未命中即无电量」判据，改查 Input/Feature 值能力；C9 删除托盘固定 100%，未知不补值；C10 蓝牙配对与连接分开记录）；P0-1 补「先身份/链路/在线，再电量」；§5.3.1 新增 LinkKind/OnlineState/PercentUnavailableReason/DeviceIdentity/LinkInfo 与四条硬约束（四判断独立、USB 父节点只是总线证据、三态判据、电量原因必填）；§11 S1 状态改为进行中。 |
 
