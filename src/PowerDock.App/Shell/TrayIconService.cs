@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
@@ -427,10 +427,10 @@ namespace PowerDock.App.Shell
                 BuildContextMenu();
                 _notifyIcon.Text = "PowerDock";
 
-                // Root-cause fix: the icon must be assigned BEFORE Visible=true. The previous
-                // implementation called UpdateState while _isTrayAvailable was still false, the
-                // guard returned early, Icon stayed null and NIM_ADD silently failed.
-                UpdateState(100, false, false, "PowerDock");
+                // 根因修复：图标必须在 Visible=true 之前赋值。旧实现在 _isTrayAvailable 仍为 false 时
+                // 调 UpdateState，守卫提前返回、Icon 为 null，NIM_ADD 静默失败。
+                // 初始值必须是「未知」而不是 100%：S0 曾写死 100%，让托盘在没有真实读数时显示满电（C9）。
+                UpdateState(null, false, false, "PowerDock");
                 if (_notifyIcon.Icon == null)
                 {
                     _isTrayAvailable = false;
@@ -608,7 +608,8 @@ namespace PowerDock.App.Shell
             {
                 return string.Format("PowerDock - {0}%", percent.Value);
             }
-            return "PowerDock";
+            // 没有有效读数时不得写成 0%：未知就是未知（AGENTS §8「未知就说未知」）。
+            return "PowerDock - 电量未知";
         }
 
         public void HandleMainWindowClosing(Window window, System.ComponentModel.CancelEventArgs e)

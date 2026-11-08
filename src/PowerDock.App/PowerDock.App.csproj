@@ -2,7 +2,10 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <!-- 需要 WinRT 蓝牙投影（Windows.Devices.Bluetooth），故对齐到 Windows 10 19041 目标框架；
+         WPF 与 WinForms 在该 TFM 下仍完整可用。 -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <UseWPF>true</UseWPF>
     <!-- 托盘 NotifyIcon 与旧版 System.Drawing 位图绘制仍走 WinForms 控件集 -->
     <UseWindowsForms>true</UseWindowsForms>
@@ -22,6 +25,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PowerDock.Core\PowerDock.Core.csproj" />
+    <!-- 真实蓝牙后端用 WinRT 投影，必须单独成 -windows 目标框架项目；App 负责注入。 -->
+    <ProjectReference Include="..\PowerDock.Providers.Bluetooth\PowerDock.Providers.Bluetooth.csproj" />
   </ItemGroup>
 
 </Project>
