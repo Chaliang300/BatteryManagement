@@ -90,6 +90,7 @@ Windows 桌面电量中心（对外名 **PowerDock**，仓库名 BatteryManageme
 | D15 | 材质 | 主窗口用 DWM Acrylic；挂件用透明窗口 + 背景模糊 + 多层渐变模拟 | Windows 没有系统级 Liquid Glass API，硬等不存在的能力不如近似并写明差距 | 11-07 |
 | D16 | 运行时与分发 | **.NET 10 LTS + WPF，S0 用 win-x64 验证未裁剪的自包含单文件** | .NET 8 于 2026-11-10 结束支持，WPF SDK 禁用裁剪。4.8 仅保留为需重新评审的选项。实际包体、运行时解包与可接受上限在 S0 确认 | 11-08 |
 | D17 | 聚合身份 | 持久化的物理设备键 + 独立来源键 | 同一设备换路径可保留别名与历史；只有可信关联才合并，避免把同型号设备混成一台 | 11-08 |
+| D18 | 分发包体上限 | **接受未裁剪自包含基线：exe 165.05 MB / zip 66.02 MB**；`PublishTrimmed=false`（WPF 禁裁剪）保持不变 | 实测值与 D16 基线一致；压缩杠杆 `EnableCompressionInSingleFile` 暂不启用（体积降、每次启动多一次解压，首帧预算需重测） | 11-08 |
 
 依据：[.NET 支持周期](https://dotnet.microsoft.com/en-us/platform/support/policy)、[WPF 裁剪限制](https://learn.microsoft.com/en-us/dotnet/core/deploying/trimming/incompatibilities#wpf)、[DWM 背景能力](https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/ne-dwmapi-dwm_systembackdrop_type)。
 
@@ -459,7 +460,7 @@ S0 状态（2026-11-08，口径同 §2）：骨架代码、`build.ps1`/`pack.ps1
 ## 14. 待确认（阻塞项，未定前不要自行决定）
 
 1. 产品名与命名空间：对外 PowerDock、目录 BatteryManagement，是否统一。
-2. S0 确认发布包体上限、最低支持 Windows 版本及旧系统材质降级范围。Win11 Build 22621 是所用 Acrylic API 的能力门槛。
+2. **发布包体上限已由 D18 定（2026-11-08）**；最低支持 Windows 版本仍未定、旧系统材质降级范围未实测。Win11 Build 22621 是所用 Acrylic API 的能力门槛。
 3. 首发设备范围：单耳机 + 单鼠标 + 本机电池，还是多品牌一次到位。
 4. Widgets Board 已定为 P2。若后续提前，需先重新评审 D2/D3/D16 和 MSIX 分发。
 5. Ardot 画板 02 的圆角文案是否同步订正；浅色挂件不透明度地板是否本轮一起做。
@@ -502,4 +503,5 @@ S0 状态（2026-11-08，口径同 §2）：骨架代码、`build.ps1`/`pack.ps1
 | 2026-11-08 | PR-S0-01 合入 `origin/main`（`dcf1c4f`），§2 表把 `src/`、`build.ps1`/`pack.ps1`、`--self-test` 的合并状态改为「是」；PR-S0-02 补 10 条设置存储失败/恢复用例（单测 12 → 22，测试工程 `net10.0-windows`），新增 `docs/验证记录-v0.1-S0-设置存储.md`；验收矩阵 `S0-STORE-02` 按解除条件（占位句柄 / 目录 ACL 两种机制的真实异常 + 回滚断言）改判「通过」，**满盘/ENOSPC 保留为独立未验证子项**；合计 12 通过 / 5 未验证 / 9 失败 |
 | 2026-11-08 | PR-S0-04 托盘规格修正：§6.8 托盘几何改为按尺寸显式表（24px 格间距 0.7→1.5；16px 显式 2.10/1.45，禁止等比缩放），并新增像素验收判据；D14「三格电池组」形态不变，仅修亚像素间距。 |
 | 2026-11-08 | PR-S0-05 窗口与材质：实现 CompositionTarget 透明合成、DWM 返回值检查/属性回读、NONE→Acrylic 分帧激活、每次显示重做帧扩展、显式静态降级；新增首帧埋点（Main→首个 Rendering）与 --diagnose-window*/--diagnose-first-frame 诊断；SYS-02 判 Win11 build>=22000；透射率判据（斜率 0.0784±容差、R²>0.95）待解锁复测。 |
+| 2026-11-08 | 所有者确认包体上限（D18：165.05 MB exe / 66.02 MB zip，未裁剪自包含基线）；§14 待确认项 2 相应更新 |
 
