@@ -1,10 +1,10 @@
-﻿# AGENTS.md
+# AGENTS.md
 
 本文件是本仓库的**协作契约**，供所有在本仓库工作的 AI agent 与开发者读取。
 每收到一次需求变更，先更新本文件，再动代码。**不接受只改代码不改文档。**
 
 - 最后更新：2026-11-08
-- 当前阶段：**S0 工程基线**（.NET 10 + WPF 的 SDK 式工程、`build.ps1`/`pack.ps1`、xunit 单测已建立，构建打包与 `--self-test` 可在本机跑通；采集与界面功能尚未开始）
+- 当前阶段：**S0 工程基线 + 主窗口导航**（.NET 10 + WPF 的 SDK 式工程、`build.ps1`/`pack.ps1`、xunit 单测已建立，构建打包与 `--self-test` 可在本机跑通；本轮只交付主窗口底部 Dock 四项导航与四页空态，采集、挂件与设置功能仍未开始，见 §6.4.1 阶段边界）
 - 需求与工程基线：`docs/设计方案-v0.1.md`
 - UI 参考：`docs/mockup/index.html`、`style.css`、`app.js`（方案 A）及 `docs/mockup/README.md`。验收规格以 §2.1 和 §6 为准。
 - 视觉源稿：Ardot `744804852905562`（文档记录有 7 块画板，本轮未重新核查）
@@ -34,9 +34,10 @@ Windows 桌面电量中心（对外名 **PowerDock**，仓库名 BatteryManageme
 | `docs/mockup/`（HTML 还原稿） | 是（方案 A，含双主题与可交互主窗口） | 是（`1f6b6d3`） | 否（已知原型差异见 §2.1） |
 | `src/PowerDock.Core` | 是（`net10.0` SDK 工程：Models / Logger / IDeviceProvider / Storage；State、Scheduling、Alerts 尚未建立） | 是（`dcf1c4f`） | 否 |
 | `src/PowerDock.App` | 是（`net10.0-windows` WPF 工程：Program / App / Diagnostics / Interop / Shell / Windows） | 是（`dcf1c4f`） | 否 |
+| 主窗口底部 Dock 导航与四页空态（`Windows/MainWindow.cs`、`Windows/MainPage*.cs`、`Windows/DockItemFactory.cs`） | 是（四项改可聚焦 `Button`，同一导航状态切 `_contentHost`，四页空态） | 否（本 PR） | 否（真实鼠标/键盘与 100% DPI 待交互桌面复验，见 `docs/验证记录-v0.1-S0-主窗口导航.md`） |
 | `build.ps1` / `pack.ps1` | 是（`dotnet build` / `dotnet publish` 自包含未裁剪单文件，自带 SDK 探测） | 是（`dcf1c4f`） | 否（包体已测，可接受上限尚未确认，见 D16） |
 | `tests/PowerDock.Core.Tests` | 是（xunit；22 条用例：12 条基线 + 10 条设置存储失败/恢复；测试工程 `net10.0-windows`） | 部分（12 条随 PR-S0-01 `dcf1c4f`；10 条待 PR-S0-02） | 否（`S0-STORE-02` 已通过，仅剩满盘/ENOSPC 子项，见验收矩阵 §3.3） |
-| `--self-test` 自检 | 是（14 项；本机 14/14 通过） | 是（`dcf1c4f`） | 否（仅本机单轮，未做跨机与多轮） |
+| `--self-test` 自检 | 是（**e99fea3 基线实测 15 项 / 15 通过**；本 PR 新增 NAV-01..03 后为 18 项。旧值「14」是 PR-S0-05 引入 `PERF-02` 之后的滞后口径，本轮订正并记入 §18） | 是（`dcf1c4f`，NAV 三项随本 PR） | 否（仅本机单轮，未做跨机与多轮） |
 | 设计稿 | 否（画板 02 圆角标注待复核；HTML 组件页预览沿用 r8，见 §2.1 C3） | — | 否 |
 
 ### 2.1 文档冲突裁决（以本表为准，遇到旧文冲突不许自行选择）
@@ -91,6 +92,7 @@ Windows 桌面电量中心（对外名 **PowerDock**，仓库名 BatteryManageme
 | D16 | 运行时与分发 | **.NET 10 LTS + WPF，S0 用 win-x64 验证未裁剪的自包含单文件** | .NET 8 于 2026-11-10 结束支持，WPF SDK 禁用裁剪。4.8 仅保留为需重新评审的选项。实际包体、运行时解包与可接受上限在 S0 确认 | 11-08 |
 | D17 | 聚合身份 | 持久化的物理设备键 + 独立来源键 | 同一设备换路径可保留别名与历史；只有可信关联才合并，避免把同型号设备混成一台 | 11-08 |
 | D18 | 分发包体上限 | **接受未裁剪自包含基线：exe 165.05 MB / zip 66.02 MB**；`PublishTrimmed=false`（WPF 禁裁剪）保持不变 | 实测值与 D16 基线一致；压缩杠杆 `EnableCompressionInSingleFile` 暂不启用（体积降、每次启动多一次解压，首帧预算需重测） | 11-08 |
+| D19 | 主窗口导航控件与状态 | **Dock 四项用 WPF `Button`**（`IsTabStop`/`Focusable`，`AutomationProperties.Name`+`AutomationId`，选中态另走 `ItemStatus`）；**不用 `TextBlock`+`Cursors.Hand`**。切页 = 缓存页面实例、只换 `_contentHost.Content`，重复点击当前项不重建；每页 `ScrollViewer` 偏移显式保存/恢复 | `TextBlock` 没有 Click 路由、没有焦点、没有无障碍语义，用户点不动也 Tab 不到——这是 e99fea3 的实测缺陷。`Button` 自带键盘激活（Space 原生、Enter 显式补）与 UIA Invoke，外部可验证 | 11-08 |
 
 依据：[.NET 支持周期](https://dotnet.microsoft.com/en-us/platform/support/policy)、[WPF 裁剪限制](https://learn.microsoft.com/en-us/dotnet/core/deploying/trimming/incompatibilities#wpf)、[DWM 背景能力](https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/ne-dwmapi-dwm_systembackdrop_type)。
 
@@ -290,6 +292,18 @@ Dock 浮在内容之上，所以内容区底部留 84 给它让位；不留就�
 - 内容区固定不流式：卡片四列、状态带四格、8 台柱状条都按像素对齐，拉伸会错位；小屏整体缩放而不是重排。
 - 标题栏的计数与列表同源，不允许出现「标题 6 台、列表 5 行」。
 
+#### 6.4.1 导航实现口径与阶段边界（D19，本 PR 的验收面）
+
+| 维度 | 本 PR 的口径 | 不在本 PR 范围 |
+| --- | --- | --- |
+| 控件 | 四项 = `Button`（`Focusable`/`IsTabStop`/`Cursor=Hand`/透明无边框模板）：文字、图标、按钮内部留白同一命中矩形；`AutomationProperties.Name` = 概览/设备/组件/设置，`AutomationId` = `PowerDock.Dock.<Page>` | 快捷键加速器、右键菜单、拖拽重排 |
+| 命中区 | 按钮自身矩形 100% 可点（模板根 `Border` 铺满并绑 `Background`，含 `Padding`）；选中态另有 3px 圆点，圆点不承担命中 | Dock 之外的入口（托盘菜单已由外壳负责） |
+| 键盘 | `Tab` 依次聚焦四项，焦点环用模板 `IsKeyboardFocused` 触发器绘制（accent 1.5px 描边，可见性由窗口内位图直出验证）；`Space` 走 WPF `Button` 原生，`Enter` 由 `PreviewKeyDown` 显式补 | 方向键在 Dock 内环绕导航 |
+| 状态 | 单一 `CurrentPage`；任意时刻恰好一项 `ItemStatus=已选中`；默认 `Overview`；重复点击当前项直接返回（不重建内容、不重置状态） | 页面内的设备勾选、别名、尺寸选择（S2） |
+| 切页 | 只替换 `_contentHost.Content`，页面实例缓存复用；每页 `ScrollViewer` 的垂直偏移在切出时保存、切入时恢复；不重开窗口 | 页面间转场动效（S2） |
+| 页面内容 | 四页各自标题 + 明确空态。概览/设备给「检查蓝牙 / 配对设备」指引；组件页说明挂件未实现；设置页以只读文本列出外壳已接通项（自启、关闭行为），**不出现可操作开关** | 状态带真实数值、设备卡、挂件预览、设置开关（S2/S3） |
+| 不改动 | Dock 胶囊几何（宽 360 / 高 44 / bottom 14 / r22）、窗口 880×600 r8、Acrylic 链路、标题栏拖动/最小化/关闭/托盘恢复 | 上述几何与外壳行为的任何调整 |
+
 ### 6.5 四个页面
 
 **概览：结论 → 焦点 → 全貌**
@@ -433,6 +447,10 @@ S0 状态（2026-11-08，口径同 §2）：骨架代码、`build.ps1`/`pack.ps1
 出口条件中「常规二启、并发二启、置前拒绝均可验证」与「无 SDK 目标机可启动」仍需独立复验，
 本机只记录了包体、解包行为与单轮自检结果，见 `docs/验证记录-v0.1-S0-NET10工程基线.md`。
 
+主窗口导航（D19）**不属于任一阶段的整段交付**：它是 S2「主窗口四页」的最小可交互切片，为修复 e99fea3 的
+「Dock 点击无响应」缺陷而单独落地。阶段边界见 §6.4.1——本切片只做导航与空态，不引入任何采集数据、
+不引入挂件、不引入设置操作项；S1 采集与 S2 其余内容的排期不变。
+
 ## 12. 质量指标
 
 | 指标 | 目标 |
@@ -505,4 +523,5 @@ S0 状态（2026-11-08，口径同 §2）：骨架代码、`build.ps1`/`pack.ps1
 | 2026-11-08 | PR-S0-05 窗口与材质：实现 CompositionTarget 透明合成、DWM 返回值检查/属性回读、NONE→Acrylic 分帧激活、每次显示重做帧扩展、显式静态降级；新增首帧埋点（Main→首个 Rendering）与 --diagnose-window*/--diagnose-first-frame 诊断；SYS-02 判 Win11 build>=22000；透射率判据（斜率 0.0784±容差、R²>0.95）待解锁复测。 |
 | 2026-11-08 | 所有者确认包体上限（D18：165.05 MB exe / 66.02 MB zip，未裁剪自包含基线）；§14 待确认项 2 相应更新 |
 | 2026-11-08 | PR-S0-05 解锁复测：抓屏纯色对照通过；Acrylic 透射 slope=0.02939/R²=0.9887（NONE 对照 0.07843/R²=1.0000），S0-WIN-03 仍按 0.0784 判据未验证；S0-WIN-04（真实 EnableTransparency=0 + 九档像素恒 22）与 S0-FIRSTFRAME-01（368.10ms）改通过；修复 AppSettings.MinimizeToTrayOnClose 未绑定到主窗口的缺口。 |
+| 2026-11-08 | 修复 e99fea3「底部 Dock 点击无响应」：Dock 四项由 `TextBlock`+`Cursors.Hand` 改为可聚焦 `Button`（D19），新增 §6.4.1 导航实现口径与阶段边界、§2 状态表对应行、§11 阶段归属说明；新增 `Windows/MainPage.cs`、`Windows/MainPageContentFactory.cs`、`Windows/DockItemFactory.cs`，`MainWindow` 增加统一导航状态与四页空态；`--self-test` 增加 NAV-01..03，新增 `--diagnose-dock-nav` 实窗交互诊断。 |
 

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Threading;
 using System.Windows;
@@ -44,6 +44,10 @@ namespace PowerDock.App
                 {
                     return WindowDiagnostics.RunWindow(true);
                 }
+                else if (cmd == "--diagnose-dock-nav")
+                {
+                    return WindowDiagnostics.RunDockNavigation();
+                }
                 else if (cmd == "--diagnose-first-frame")
                 {
                     return WindowDiagnostics.RunFirstFrame();
@@ -85,6 +89,7 @@ namespace PowerDock.App
                     Console.WriteLine("  --diagnose-window          Report DWM backdrop HRESULTs, read-backs and staged activation");
                     Console.WriteLine("  --diagnose-window-fallback Force the static fallback branch and report it");
                     Console.WriteLine("  --diagnose-first-frame     Measure Program.Main -> first CompositionTarget.Rendering");
+                    Console.WriteLine("  --diagnose-dock-nav        Exercise Dock hit-testing, UIA Invoke, Enter/Space and scroll retention");
                     Console.WriteLine("  --diagnose-close-tray      Exercise real close behavior with tray available (hide, stay alive)");
                     Console.WriteLine("  --diagnose-close-no-tray   Exercise real close behavior without tray (process exit)");
                     Console.WriteLine("  --diagnose-tray-failure  Inject tray failure and verify close=>process exit (diagnostic)");
