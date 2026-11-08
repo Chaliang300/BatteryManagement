@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -886,6 +886,31 @@ namespace PowerDock.App.Diagnostics
                     Id = "PERF-02",
                     Category = "Performance",
                     Description = "首帧埋点通路",
+                    Passed = false,
+                    Detail = ex.Message
+                });
+            }
+
+            // WIDGET-01: 挂件三档规格（173×173/362×173/362×362 DIP）、100%/150% DPI 量测无溢出与离线/截断
+            try
+            {
+                var widgetDiag = WidgetDiagnostics.RunDiagnosticsInternal();
+                items.Add(new SelfTestItem
+                {
+                    Id = "WIDGET-01",
+                    Category = "Widget",
+                    Description = "挂件三档规格（173×173/362×173/362×362 DIP）、100%/150% DPI 量测无溢出与离线/截断",
+                    Passed = widgetDiag.AllPassed,
+                    Detail = widgetDiag.AllPassed ? "三档尺寸、DPI 量测无溢出、离线显示「—」与切档保持勾选全部通过" : "挂件自检存在失败项"
+                });
+            }
+            catch (Exception ex)
+            {
+                items.Add(new SelfTestItem
+                {
+                    Id = "WIDGET-01",
+                    Category = "Widget",
+                    Description = "挂件三档规格与量测自检",
                     Passed = false,
                     Detail = ex.Message
                 });

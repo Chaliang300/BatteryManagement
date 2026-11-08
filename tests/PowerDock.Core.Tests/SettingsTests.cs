@@ -34,6 +34,7 @@ namespace PowerDock.Core.Tests
             Assert.Empty(settings.DeviceAliases);
             Assert.Empty(settings.IgnoredDevices);
             Assert.Empty(settings.PinnedDevices);
+            Assert.Empty(settings.WidgetDevices);
         }
 
         [Fact]
@@ -115,6 +116,61 @@ namespace PowerDock.Core.Tests
                 Assert.Equal(12, store.Current.LowBatteryThreshold);
                 Assert.Equal(25, store.Current.AlertCooldownMinutes);
                 Assert.False(store.Current.ShowStatusDot);
+                Assert.NotNull(store.Current.WidgetDevices);
+                Assert.Empty(store.Current.WidgetDevices);
+            }
+            finally
+            {
+                TestPaths.TryDelete(dir);
+            }
+        }
+
+        [Fact]
+        public void SettingsStore_组件勾选置顶与忽略各自独立且可正确持久化()
+        {
+            string dir = TestPaths.NewTempDir("store-widgets-orthogonality");
+            try
+            {
+                string path = Path.Combine(dir, "settings.json");
+                var store = new SettingsStore(path);
+                var settings = new AppSettings();
+
+                // 勾选、置顶、忽略各自赋予不同的设备集合
+                settings.WidgetDevices.Add("dev-mouse");
+                settings.WidgetDevices.Add("dev-keyboard");
+
+                settings.PinnedDevices.Add("dev-mouse");
+
+                settings.IgnoredDevices.Add("dev-headset");
+
+                store.Save(settings);
+
+                var reloaded = new SettingsStore(path);
+                reloaded.Load();
+
+                // 验证各集合完全正交独立
+                Assert.Equal(2, reloaded.Current.WidgetDevices.Count);
+                Assert.Contains("dev-mouse", reloaded.Current.WidgetDevices);
+                Assert.Contains("dev-keyboard", reloaded.Current.WidgetDevices);
+                Assert.DoesNotContain("dev-headset", reloaded.Current.WidgetDevices);
+
+                Assert.Single(reloaded.Current.PinnedDevices);
+                Assert.Contains("dev-mouse", reloaded.Current.PinnedDevices);
+
+                Assert.Single(reloaded.Current.IgnoredDevices);
+                Assert.Contains("dev-headset", reloaded.Current.IgnoredDevices);
+
+                // 修改勾选不影响置顶与忽略
+                var modified = reloaded.Current.Clone();
+                modified.WidgetDevices.Remove("dev-mouse");
+                modified.WidgetDevices.Add("dev-pad");
+                store.Save(modified);
+
+                var reloaded2 = new SettingsStore(path);
+                reloaded2.Load();
+                Assert.Equal(new[] { "dev-keyboard", "dev-pad" }, reloaded2.Current.WidgetDevices);
+                Assert.Equal(new[] { "dev-mouse" }, reloaded2.Current.PinnedDevices);
+                Assert.Equal(new[] { "dev-headset" }, reloaded2.Current.IgnoredDevices);
             }
             finally
             {

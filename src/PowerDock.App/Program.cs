@@ -60,6 +60,10 @@ namespace PowerDock.App
                 {
                     return TrayDiagnostics.Run();
                 }
+                else if (cmd == "--diagnose-widgets")
+                {
+                    return WidgetDiagnostics.Run();
+                }
                 else if (cmd == "--diagnose-read")
                 {
                     int seconds = 20;

@@ -150,12 +150,17 @@ namespace PowerDock.App
             {
                 _acquisition = new AcquisitionHost(Dispatcher);
                 bool attached = _mainWindow != null && _mainWindow.AttachDeviceSummary();
+                if (_mainWindow != null)
+                {
+                    _mainWindow.AttachWidgetsPage();
+                }
 
                 _acquisition.Subscribe(delegate(IReadOnlyList<DeviceState> snapshot)
                 {
                     if (_mainWindow != null)
                     {
                         _mainWindow.RenderDevices(snapshot);
+                        _mainWindow.RenderWidgets(snapshot);
                     }
                     ApplyTraySnapshot(snapshot);
                 });

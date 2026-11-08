@@ -319,6 +319,11 @@ namespace PowerDock.Core.Storage
             {
                 settings.PinnedDevices = new List<string>();
             }
+
+            if (settings.WidgetDevices == null)
+            {
+                settings.WidgetDevices = new List<string>();
+            }
         }
 
         private static bool ValidateSettings(AppSettings expected, AppSettings actual)
@@ -395,6 +400,21 @@ namespace PowerDock.Core.Storage
                 for (int i = 0; i < expected.PinnedDevices.Count; i++)
                 {
                     if (!string.Equals(expected.PinnedDevices[i], actual.PinnedDevices[i], StringComparison.Ordinal))
+                        return false;
+                }
+            }
+
+            // WidgetDevices (AGENTS.md §5.3.0 组件勾选独立持久化与回读校验)
+            int expectedWidgetCount = expected.WidgetDevices != null ? expected.WidgetDevices.Count : 0;
+            int actualWidgetCount = actual.WidgetDevices != null ? actual.WidgetDevices.Count : 0;
+            if (expectedWidgetCount != actualWidgetCount)
+                return false;
+
+            if (expected.WidgetDevices != null && actual.WidgetDevices != null)
+            {
+                for (int i = 0; i < expected.WidgetDevices.Count; i++)
+                {
+                    if (!string.Equals(expected.WidgetDevices[i], actual.WidgetDevices[i], StringComparison.Ordinal))
                         return false;
                 }
             }

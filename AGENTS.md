@@ -36,8 +36,8 @@ Windows 桌面电量中心（对外名 **PowerDock**，仓库名 BatteryManageme
 | `src/PowerDock.Core` | 是（`net10.0` SDK 工程：Models / Logger / IDeviceProvider / Storage；State、Scheduling、Alerts 尚未建立） | 是（`dcf1c4f`） | 否 |
 | `src/PowerDock.App` | 是（`net10.0-windows` WPF 工程：Program / App / Diagnostics / Interop / Shell / Windows） | 是（`dcf1c4f`） | 否 |
 | `build.ps1` / `pack.ps1` | 是（`dotnet build` / `dotnet publish` 自包含未裁剪单文件，自带 SDK 探测） | 是（`dcf1c4f`） | 否（包体已测，可接受上限尚未确认，见 D16） |
-| `tests/PowerDock.Core.Tests` | 是（xunit；22 条用例：12 条基线 + 10 条设置存储失败/恢复；测试工程 `net10.0-windows`） | 部分（12 条随 PR-S0-01 `dcf1c4f`；10 条待 PR-S0-02） | 否（`S0-STORE-02` 已通过，仅剩满盘/ENOSPC 子项，见验收矩阵 §3.3） |
-| `--self-test` 自检 | 是（14 项；本机 14/14 通过） | 是（`dcf1c4f`） | 否（仅本机单轮，未做跨机与多轮） |
+| `tests/PowerDock.Core.Tests` | 是（xunit；95 条用例全部通过：覆盖解析、调度、存储、回滚与挂件三档截断/排序契约；测试工程 `net10.0-windows`） | 部分 | 否（`S0-STORE-02` 已通过，仅剩满盘/ENOSPC 子项，见验收矩阵 §3.3） |
+| `--self-test` 自检 | 是（16 项；含 WIDGET-01 挂件三档/DPI量测自检；本机 16/16 通过） | 否（14项随 `dcf1c4f` 合入，WIDGET-01 本轮新增） | 否（仅本机单轮，未做跨机与多轮） |
 | 设计稿 | 否（画板 02 圆角标注待复核；HTML 组件页预览沿用 r8，见 §2.1 C3） | — | 否 |
 
 ### 2.1 文档冲突裁决（以本表为准，遇到旧文冲突不许自行选择）
@@ -168,6 +168,13 @@ record ReadingKey(string ProviderId, string EndpointId, string BatteryId);
 record BatteryReading(ReadingKey Key, int? Percent, bool? Charging, DateTime TsUtc);
 record BatterySample(DeviceKey Key, DateTime TsUtc, int Percent, bool? Charging, BatterySource Source);
 ```
+
+#### 5.3.0 设置存储模型与字段独立性（S2 组件页契约）
+
+- **组件勾选字段**：`AppSettings.WidgetDevices` (`List<string>`)，存储物理设备键 `DeviceKey.Value`。
+- **三项状态正交独立**：组件勾选（`WidgetDevices`）、置顶（`PinnedDevices`）和忽略（`IgnoredDevices`）各自独立维护，互不推导也不互相覆盖。
+- **旧配置兼容**：反序列化时缺失 `WidgetDevices` 属性的旧 `settings.json` 自动补为 `new List<string>()`，无异常、不损坏其他字段。
+- **持久化可靠性**：勾选与尺寸持久化遵循原子写与回读校验；保存失败时自动回滚至先前有效配置，UI 恢复旧值并反馈。
 
 `ProviderUpdate` 区分发现、连接变化、读数、读取失败和来源不可用。发现必须能表示已配对但暂不可读的设备。
 同一来源同一端点的刷新不重叠，取消、超时或会话结束后丢弃过期回调。独立充电查询的成功时间与电量分开记录。
@@ -349,8 +356,7 @@ Dock 浮在内容之上，所以内容区底部留 84 给它让位；不留就�
 （`在组件中 · 2.4G HID` / `未显示 · 蓝牙 GATT` / `离线 · 6 分钟前`）。
 底部操作条：设别名、置顶、忽略、查看日志。
 
-**组件**：左清单（可勾选，实时显示 N/8）+ 右 1:1 挂件预览（362 宽，不放大——它是独立窗口，放大就不代表真实尺寸），
-尺寸 seg 压在预览右上角。预览与真实挂件同源同一份行数据。
+**组件**：左清单（可勾选，实时显示 N/Total）+ 右 1:1 挂件预览（173×173 / 362×173 / 362×362 DIP，不放大——它是独立窗口，放大就不代表真实尺寸），尺寸 seg 压在右上角。预览使用现有设备快照与唯一的勾选集合（`WidgetDevices`），按契约排序后截断；切尺寸不清空勾选集合；已勾选离线设备照常显示（整行 50%，电量「—」）；持久化失败时回滚并反馈。组件页专属文件为 `WidgetsPageView.cs`，挂载点走 MainWindow 约定接口 `AttachWidgetsPage` / `RenderWidgets`，与桌面挂件宿主复用同一份 `WidgetRowItem` 投影行数据；宿主未实现时显式标为「挂件预览」。
 
 **设置**：2×2 四块面板——界面（外观 / 尺寸 / 置顶）、行为（自启 / 关闭行为 / 阈值）、
 组件（每行显示 / 最多显示）、刷新与存储（策略 / 历史保留）。
@@ -551,4 +557,5 @@ S0 状态（2026-11-08，口径同 §2）：骨架代码、`build.ps1`/`pack.ps1
 | 2026-11-08 | 所有者确认包体上限（D18：165.05 MB exe / 66.02 MB zip，未裁剪自包含基线）；§14 待确认项 2 相应更新 |
 | 2026-11-08 | PR-S0-05 解锁复测：抓屏纯色对照通过；Acrylic 透射 slope=0.02939/R²=0.9887（NONE 对照 0.07843/R²=1.0000），S0-WIN-03 仍按 0.0784 判据未验证；S0-WIN-04（真实 EnableTransparency=0 + 九档像素恒 22）与 S0-FIRSTFRAME-01（368.10ms）改通过；修复 AppSettings.MinimizeToTrayOnClose 未绑定到主窗口的缺口。 |
 | 2026-11-08 | S1 采集契约：§2.1 新增 C8/C9/C10（C8 作废「顶层 HidP_GetCaps 未命中即无电量」判据，改查 Input/Feature 值能力；C9 删除托盘固定 100%，未知不补值；C10 蓝牙配对与连接分开记录）；P0-1 补「先身份/链路/在线，再电量」；§5.3.1 新增 LinkKind/OnlineState/PercentUnavailableReason/DeviceIdentity/LinkInfo 与四条硬约束（四判断独立、USB 父节点只是总线证据、三态判据、电量原因必填）；§11 S1 状态改为进行中。 |
+| 2026-11-08 | S2 组件页契约（feat/s2-widgets-page）：§5.3.0 锁定组件勾选字段 AppSettings.WidgetDevices 与三态独立性（勾选/置顶/忽略互不影响，旧配置缺字段自动补空列表兼容）；§6.5 细化组件页 1:1 预览（173×173/362×173/362×362 DIP）、三档切换不丢勾选、已勾选离线设备半透明显示「—」、SettingsStore 失败回滚反馈；约定 MainWindow.WidgetsContent 专属挂载点与 WidgetRowItem 投影复用契约。 |
 
