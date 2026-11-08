@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace PowerDock.Core.Common
 {
@@ -128,25 +129,42 @@ namespace PowerDock.Core.Common
         public string DisplayName { get; set; }
         public string Alias { get; set; }
         public DeviceCategory Category { get; set; }
-        public BatterySource AuthoritativeSource { get; set; }
+        public BatterySource? AuthoritativeSource { get; set; }
         public int? Percent { get; set; }
         public bool? Charging { get; set; }
         public ConnectionState State { get; set; }
         public bool HasConflict { get; set; }
         public DateTime? LastSuccessfulReadingUtc { get; set; }
 
+        /// <summary>链路与在线证据；链路未知时不得由 UI 猜成有线或 2.4G。</summary>
+        public LinkInfo Link { get; set; }
+
+        /// <summary>为 false 表示身份是按端点派生的临时键，界面与诊断必须标「身份未确认」。</summary>
+        public bool IdentityVerified { get; set; }
+
+        /// <summary>当 <see cref="Percent"/> 为 null 时说明为什么读不到，UI 显示「—」并标注原因。</summary>
+        public PercentUnavailableReason PercentReason { get; set; }
+
+        /// <summary>各来源的最新读数，按来源键分别保留，用于 D4 裁决与冲突标注。</summary>
+        public IReadOnlyList<SourceReading> Sources { get; set; }
+
         public DeviceState(DeviceKey key, string displayName, DeviceCategory category)
         {
             if (key == null) throw new ArgumentNullException("key");
             Key = key;
-            DisplayName = displayName ?? "Unknown Device";
+            DisplayName = displayName ?? "未知设备";
             Category = category;
             State = ConnectionState.Unknown;
+            PercentReason = PercentUnavailableReason.NotProbed;
+            Sources = new List<SourceReading>();
         }
 
         public string EffectiveName
         {
             get { return !string.IsNullOrEmpty(Alias) ? Alias : DisplayName; }
         }
+
+        /// <summary>有读数但已超出该来源的时效窗口时为 true；界面标「N 分钟前」而不是把旧值当新值。</summary>
+        public bool IsPercentStale { get; set; }
     }
 }
