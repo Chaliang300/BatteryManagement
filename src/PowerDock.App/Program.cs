@@ -122,7 +122,6 @@ namespace PowerDock.App
                 AppLogger.Info("Diagnostic tray failure mode: tray registration will fail; window auto-closes after 900ms.");
             }
 
-            using (SingleInstanceService singleInstance = new SingleInstanceService())
             bool suppressFeedback = false;
             if (args != null)
             {

@@ -179,7 +179,14 @@ namespace PowerDock.App.Interop
             }
             return false;
         }
-}
+
+        // --- single-instance constants (PR-S0-03) ---
+        public const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+        public const uint TOKEN_QUERY = 0x0008;
+        public const int TokenUser = 1;
+        public const uint WM_CLOSE = 0x0010;
+        public const uint MB_OK = 0x00000000;
+        public const uint MB_ICONWARNING = 0x00000030;
 
         // --- single-instance pipe identity (PR-S0-03) ---
 
@@ -301,4 +308,6 @@ namespace PowerDock.App.Interop
         public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 }
 
+
+}
 
