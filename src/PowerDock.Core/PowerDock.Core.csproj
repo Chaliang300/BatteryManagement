@@ -12,4 +12,9 @@
     <Version>0.1.0</Version>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- 本机电池读取走 Win32_Battery；只读查询，不安装服务、不改电源方案。 -->
+    <PackageReference Include="System.Management" Version="9.0.0" />
+  </ItemGroup>
+
 </Project>

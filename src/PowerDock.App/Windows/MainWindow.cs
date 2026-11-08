@@ -15,7 +15,7 @@ using PowerDock.Core.Diagnostics;
 
 namespace PowerDock.App.Windows
 {
-    public class MainWindow : Window
+    public partial class MainWindow : Window
     {
         public const double TargetWidthDip = 880.0;
         public const double TargetHeightDip = 600.0;

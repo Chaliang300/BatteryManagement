@@ -1,8 +1,13 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using System.Windows;
+using PowerDock.App.Acquisition;
 using PowerDock.App.Shell;
 using PowerDock.App.Windows;
+using PowerDock.Core.Common;
 using PowerDock.Core.Diagnostics;
+using PowerDock.Core.State;
 using PowerDock.Core.Storage;
 
 namespace PowerDock.App
@@ -11,6 +16,7 @@ namespace PowerDock.App
     {
         private TrayIconService _trayIconService;
         private MainWindow _mainWindow;
+        private AcquisitionHost _acquisition;
 
         /// <summary>Diagnostic-only switches used by --diagnose-tray-failure (S0-TRAY-03 branch).</summary>
         public static bool TrayFailureInjection;
@@ -24,6 +30,12 @@ namespace PowerDock.App
         public MainWindow MainWindowInstance
         {
             get { return _mainWindow; }
+        }
+
+        /// <summary>设备页、托盘与后续挂件共用的采集宿主；三处只消费它的同一份快照。</summary>
+        public AcquisitionHost Acquisition
+        {
+            get { return _acquisition; }
         }
 
         protected override void OnStartup(StartupEventArgs e)
@@ -68,6 +80,9 @@ namespace PowerDock.App
                         _mainWindow.ActivateAndRestore();
                     }
                 };
+
+                // 真实采集：设备页与托盘消费同一份快照（AGENTS §6.2）。
+                StartAcquisition();
 
                 // 判断是否以自启隐藏模式启动
                 bool autostart = false;
@@ -125,9 +140,76 @@ namespace PowerDock.App
             }
         }
 
+        /// <summary>
+        /// 装配真实 Provider 并把同一份快照分发给设备页与托盘。
+        /// 「刷新设备」必须走真实刷新路径，不能只是重画界面。
+        /// </summary>
+        private void StartAcquisition()
+        {
+            try
+            {
+                _acquisition = new AcquisitionHost(Dispatcher);
+                bool attached = _mainWindow != null && _mainWindow.AttachDeviceSummary();
+
+                _acquisition.Subscribe(delegate(IReadOnlyList<DeviceState> snapshot)
+                {
+                    if (_mainWindow != null)
+                    {
+                        _mainWindow.RenderDevices(snapshot);
+                    }
+                    ApplyTraySnapshot(snapshot);
+                });
+
+                _trayIconService.OnRefreshDevices = delegate
+                {
+                    AppLogger.Info("Manual refresh requested from tray.");
+                    _acquisition.RefreshNowAsync().ContinueWith(delegate(Task t)
+                    {
+                        if (t.IsFaulted && t.Exception != null)
+                        {
+                            AppLogger.Error("Manual refresh failed", t.Exception.GetBaseException());
+                        }
+                    }, TaskScheduler.Default);
+                };
+
+                // 兜底刷新：S0 阶段先用 60s（AGENTS §5.6 空闲可见周期）；省电/锁屏暂停留到 S1 后续 PR。
+                _acquisition.StartAsync(TimeSpan.FromSeconds(60)).ContinueWith(delegate(Task t)
+                {
+                    if (t.IsFaulted && t.Exception != null)
+                    {
+                        AppLogger.Error("Acquisition start failed", t.Exception.GetBaseException());
+                    }
+                }, TaskScheduler.Default);
+
+                if (!attached)
+                {
+                    AppLogger.Warn("Device summary view not attached (window content host missing).");
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("Failed to start acquisition host", ex);
+            }
+        }
+
+        /// <summary>
+        /// 托盘只反映聚合结果：取最低电量设备；没有任何有效读数时呈现未知，绝不回退到固定 100%。
+        /// </summary>
+        private void ApplyTraySnapshot(IReadOnlyList<DeviceState> snapshot)
+        {
+            if (_trayIconService == null) return;
+            TrayAggregate aggregate = AcquisitionHost.AggregateForTray(snapshot);
+            _trayIconService.UpdateState(aggregate.Percent, aggregate.IsCharging, aggregate.IsOffline, aggregate.Tooltip);
+        }
+
         protected override void OnExit(ExitEventArgs e)
         {
             AppLogger.Info("PowerDock application exiting.");
+            if (_acquisition != null)
+            {
+                _acquisition.Dispose();
+                _acquisition = null;
+            }
             if (_trayIconService != null)
             {
                 _trayIconService.Dispose();

@@ -291,15 +291,31 @@ namespace PowerDock.Core.State
             }
         }
 
-        /// <summary>测试与诊断用：立即结算挂起更新并返回最新快照，不等待合并窗口。</summary>
+        /// <summary>测试与诊断用：立即结算挂起更新并返回最新快照，同时通知订阅方。</summary>
         public IReadOnlyList<DeviceState> PublishNow()
         {
+            List<DeviceState> built;
             lock (_sync)
             {
                 _dirty = false;
-                _snapshot = BuildSnapshotLocked();
-                return _snapshot;
+                built = BuildSnapshotLocked();
+                _snapshot = built;
             }
+
+            EventHandler<DeviceStateSnapshotEventArgs> handler = SnapshotUpdated;
+            if (handler != null)
+            {
+                try
+                {
+                    handler(this, new DeviceStateSnapshotEventArgs(built));
+                }
+                catch (Exception ex)
+                {
+                    AppLogger.Error("SnapshotUpdated subscriber threw", ex);
+                }
+            }
+
+            return built;
         }
 
         private List<DeviceState> BuildSnapshotLocked()

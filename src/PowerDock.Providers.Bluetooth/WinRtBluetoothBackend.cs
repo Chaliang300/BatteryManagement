@@ -38,8 +38,7 @@ namespace PowerDock.Providers.Bluetooth
         private static readonly string[] RequestedProperties =
         {
             "System.Devices.Aep.IsPaired",
-            "System.Devices.ContainerId",
-            "System.Devices.Aep.Bluetooth.Address"
+            "System.Devices.ContainerId"
         };
 
         public void Start()
