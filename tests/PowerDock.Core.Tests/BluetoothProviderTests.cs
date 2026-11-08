@@ -95,7 +95,7 @@ namespace PowerDock.Core.Tests
         }
 
         [Fact]
-        public void PairedButDisconnected_RefreshDoesNotCallGatt()
+        public async Task PairedButDisconnected_RefreshDoesNotCallGatt()
         {
             var backend = new FakeBackend();
             var provider = new BluetoothDeviceProvider(backend);
@@ -104,7 +104,7 @@ namespace PowerDock.Core.Tests
             backend.EmitDevices(Device("ble-1", true, false, "键盘"));
 
             ReadingKey key = updates[0].Key;
-            provider.RefreshAsync(key, CancellationToken.None).GetAwaiter().GetResult();
+            await provider.RefreshAsync(key, CancellationToken.None);
 
             Assert.Empty(backend.ReadCalls);
             ProviderUpdate last = updates[updates.Count - 1];
@@ -115,7 +115,7 @@ namespace PowerDock.Core.Tests
         }
 
         [Fact]
-        public void ConnectedWithoutBatteryService_StaysOnlineWithNullPercent()
+        public async Task ConnectedWithoutBatteryService_StaysOnlineWithNullPercent()
         {
             var backend = new FakeBackend();
             backend.NextResult = BleBatteryReadResult.Unavailable(PercentUnavailableReason.NoBatteryService, "service 0x180F not found");
@@ -125,7 +125,7 @@ namespace PowerDock.Core.Tests
             backend.EmitDevices(Device("ble-2", true, true, "鼠标"));
 
             ReadingKey key = updates[0].Key;
-            provider.RefreshAsync(key, CancellationToken.None).GetAwaiter().GetResult();
+            await provider.RefreshAsync(key, CancellationToken.None);
 
             ProviderUpdate last = updates[updates.Count - 1];
             Assert.Equal(UpdateKind.ReadingFailed, last.Kind);
@@ -136,7 +136,7 @@ namespace PowerDock.Core.Tests
         }
 
         [Fact]
-        public void ConnectedWithReadableBattery_ReportsPercent()
+        public async Task ConnectedWithReadableBattery_ReportsPercent()
         {
             var backend = new FakeBackend();
             backend.NextResult = new BleBatteryReadResult
@@ -151,7 +151,7 @@ namespace PowerDock.Core.Tests
             provider.Start();
             backend.EmitDevices(Device("ble-3", true, true, "耳机"));
 
-            provider.RefreshAsync(updates[0].Key, CancellationToken.None).GetAwaiter().GetResult();
+            await provider.RefreshAsync(updates[0].Key, CancellationToken.None);
 
             ProviderUpdate last = updates[updates.Count - 1];
             Assert.Equal(UpdateKind.ReadingUpdated, last.Kind);
@@ -179,7 +179,7 @@ namespace PowerDock.Core.Tests
         }
 
         [Fact]
-        public void AdapterUnavailable_DoesNotDropDevicesOrCachedReading()
+        public async Task AdapterUnavailable_DoesNotDropDevicesOrCachedReading()
         {
             var backend = new FakeBackend();
             backend.NextResult = new BleBatteryReadResult { Percent = 88, Reason = PercentUnavailableReason.None, Detail = "read" };
@@ -187,7 +187,7 @@ namespace PowerDock.Core.Tests
             List<ProviderUpdate> updates = Capture(provider);
             provider.Start();
             backend.EmitDevices(Device("ble-5", true, true, "键盘"));
-            provider.RefreshAsync(updates[0].Key, CancellationToken.None).GetAwaiter().GetResult();
+            await provider.RefreshAsync(updates[0].Key, CancellationToken.None);
 
             backend.EmitAvailability(false, "radio off");
 

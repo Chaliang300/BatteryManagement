@@ -35,6 +35,13 @@ namespace PowerDock.Providers.Bluetooth
         public event EventHandler<BluetoothAvailabilityChangedEventArgs> AvailabilityChanged;
         public event EventHandler<BluetoothBatteryNotificationEventArgs> BatteryNotified;
 
+        private static readonly string[] RequestedProperties =
+        {
+            "System.Devices.Aep.IsPaired",
+            "System.Devices.ContainerId",
+            "System.Devices.Aep.Bluetooth.Address"
+        };
+
         public void Start()
         {
             lock (_sync)
@@ -45,7 +52,12 @@ namespace PowerDock.Providers.Bluetooth
 
             try
             {
-                _watcher = DeviceInformation.CreateWatcher(BluetoothLEDevice.GetDeviceSelectorFromPairingState(true));
+                // 必须显式请求属性：否则 Properties 里没有 Aep.IsPaired 与 ContainerId，
+                // 配对状态与容器归并都会落空（实测 FindAllAsync 只传选择器时二者皆缺失）。
+                _watcher = DeviceInformation.CreateWatcher(
+                    BluetoothLEDevice.GetDeviceSelectorFromPairingState(true),
+                    RequestedProperties,
+                    DeviceInformationKind.AssociationEndpoint);
                 _watcher.Added += OnDeviceAdded;
                 _watcher.Updated += OnDeviceUpdated;
                 _watcher.Removed += OnDeviceRemoved;
@@ -98,7 +110,8 @@ namespace PowerDock.Providers.Bluetooth
             {
                 var devices = new List<BluetoothDeviceSnapshot>();
                 IReadOnlyList<DeviceInformation> paired = DeviceInformation.FindAllAsync(
-                    BluetoothLEDevice.GetDeviceSelectorFromPairingState(true)).AsTask().GetAwaiter().GetResult();
+                    BluetoothLEDevice.GetDeviceSelectorFromPairingState(true),
+                    RequestedProperties).AsTask().GetAwaiter().GetResult();
 
                 foreach (DeviceInformation info in paired)
                 {
@@ -154,8 +167,8 @@ namespace PowerDock.Providers.Bluetooth
         }
 
         /// <summary>
-        /// 读 AEP 的配对标记。System.Devices.Aep.IsPaired 是布尔；枚举器若未带该属性，
-        /// 则视为「由 paired 选择器枚举」为真，但仍在诊断里保留来源说明。
+        /// 读 AEP 的配对标记。已显式请求 System.Devices.Aep.IsPaired；
+        /// 若枚举器仍未提供该属性，则把「由 paired 选择器枚举出来」视为已配对（选择器本身即配对过滤器）。
         /// </summary>
         private static bool ReadAepPaired(DeviceInformation info)
         {
