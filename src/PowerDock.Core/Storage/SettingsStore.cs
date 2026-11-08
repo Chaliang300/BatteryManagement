@@ -319,6 +319,11 @@ namespace PowerDock.Core.Storage
             {
                 settings.PinnedDevices = new List<string>();
             }
+
+            if (settings.WidgetDevices == null)
+            {
+                settings.WidgetDevices = new List<string>();
+            }
         }
 
         private static bool ValidateSettings(AppSettings expected, AppSettings actual)
@@ -399,7 +404,139 @@ namespace PowerDock.Core.Storage
                 }
             }
 
+            // WidgetDevices
+            int expectedWidgetCount = expected.WidgetDevices != null ? expected.WidgetDevices.Count : 0;
+            int actualWidgetCount = actual.WidgetDevices != null ? actual.WidgetDevices.Count : 0;
+            if (expectedWidgetCount != actualWidgetCount)
+                return false;
+
+            if (expected.WidgetDevices != null && actual.WidgetDevices != null)
+            {
+                for (int i = 0; i < expected.WidgetDevices.Count; i++)
+                {
+                    if (!string.Equals(expected.WidgetDevices[i], actual.WidgetDevices[i], StringComparison.Ordinal))
+                        return false;
+                }
+            }
+
             return true;
+        }
+
+        /// <summary>
+        /// 原子更新设备别名，经磁盘回读校验成功后生效并返回 true；失败回滚并返回 false。
+        /// </summary>
+        public bool TrySetDeviceAlias(string deviceKey, string alias)
+        {
+            if (string.IsNullOrEmpty(deviceKey)) return false;
+            try
+            {
+                AppSettings next = Current.Clone();
+                if (string.IsNullOrWhiteSpace(alias))
+                {
+                    next.DeviceAliases.Remove(deviceKey);
+                }
+                else
+                {
+                    next.DeviceAliases[deviceKey] = alias.Trim();
+                }
+                Save(next);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("TrySetDeviceAlias 失败: " + ex.Message, ex);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 切换设备置顶状态，经磁盘回读校验成功后生效；失败回滚并返回 false。
+        /// </summary>
+        public bool TryTogglePinnedDevice(string deviceKey, out bool isPinned)
+        {
+            isPinned = false;
+            if (string.IsNullOrEmpty(deviceKey)) return false;
+            try
+            {
+                AppSettings next = Current.Clone();
+                bool exists = next.PinnedDevices.Contains(deviceKey);
+                if (exists)
+                {
+                    next.PinnedDevices.Remove(deviceKey);
+                    isPinned = false;
+                }
+                else
+                {
+                    next.PinnedDevices.Add(deviceKey);
+                    isPinned = true;
+                }
+                Save(next);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("TryTogglePinnedDevice 失败: " + ex.Message, ex);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 切换设备忽略状态，经磁盘回读校验成功后生效；失败回滚并返回 false。
+        /// </summary>
+        public bool TryToggleIgnoredDevice(string deviceKey, out bool isIgnored)
+        {
+            isIgnored = false;
+            if (string.IsNullOrEmpty(deviceKey)) return false;
+            try
+            {
+                AppSettings next = Current.Clone();
+                bool exists = next.IgnoredDevices.Contains(deviceKey);
+                if (exists)
+                {
+                    next.IgnoredDevices.Remove(deviceKey);
+                    isIgnored = false;
+                }
+                else
+                {
+                    next.IgnoredDevices.Add(deviceKey);
+                    isIgnored = true;
+                }
+                Save(next);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("TryToggleIgnoredDevice 失败: " + ex.Message, ex);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 设置设备在挂件中的勾选状态，经磁盘回读校验成功后生效；失败回滚并返回 false。
+        /// </summary>
+        public bool TrySetWidgetSelected(string deviceKey, bool selected)
+        {
+            if (string.IsNullOrEmpty(deviceKey)) return false;
+            try
+            {
+                AppSettings next = Current.Clone();
+                bool exists = next.WidgetDevices.Contains(deviceKey);
+                if (selected && !exists)
+                {
+                    next.WidgetDevices.Add(deviceKey);
+                }
+                else if (!selected && exists)
+                {
+                    next.WidgetDevices.Remove(deviceKey);
+                }
+                Save(next);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("TrySetWidgetSelected 失败: " + ex.Message, ex);
+                return false;
+            }
         }
     }
 }

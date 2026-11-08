@@ -1,8 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- 设置存储的失败路径用例要用 Windows ACL 注入「目录拒绝写入」，故测试工程也指向 -windows -->
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <!-- 设置存储的失败路径用例要用 Windows ACL 注入「目录拒绝写入」，且设备页 UI 测试需测试 WPF 控件与契约 -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
     <AssemblyName>PowerDock.Core.Tests</AssemblyName>
     <RootNamespace>PowerDock.Core.Tests</RootNamespace>
     <ImplicitUsings>disable</ImplicitUsings>
@@ -20,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\PowerDock.Core\PowerDock.Core.csproj" />
+    <ProjectReference Include="..\..\src\PowerDock.App\PowerDock.App.csproj" />
   </ItemGroup>
 
 </Project>

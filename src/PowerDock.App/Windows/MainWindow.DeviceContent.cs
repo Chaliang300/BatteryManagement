@@ -47,5 +47,19 @@ namespace PowerDock.App.Windows
         {
             get { return _deviceSummary != null; }
         }
+
+        /// <summary>跨页定位到指定设备卡片（供概览负责人点击设备全貌跳转时调用）。</summary>
+        public bool SelectDeviceCard(DeviceKey key)
+        {
+            if (_deviceSummary == null) return false;
+            return _deviceSummary.SelectAndScrollToDevice(key);
+        }
+
+        /// <summary>跨页定位到指定设备卡片（重载：通过键字符串或设备名匹配）。</summary>
+        public bool SelectDeviceCard(string keyOrName)
+        {
+            if (_deviceSummary == null) return false;
+            return _deviceSummary.SelectAndScrollToDevice(keyOrName);
+        }
     }
 }

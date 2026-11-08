@@ -17,6 +17,7 @@ namespace PowerDock.Core.Storage
         public Dictionary<string, string> DeviceAliases { get; set; }
         public List<string> IgnoredDevices { get; set; }
         public List<string> PinnedDevices { get; set; }
+        public List<string> WidgetDevices { get; set; }
         public bool ShowStatusDot { get; set; }
         public bool ShowBatteryBar { get; set; }
         public bool ShowPercentage { get; set; }
@@ -38,6 +39,7 @@ namespace PowerDock.Core.Storage
             DeviceAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             IgnoredDevices = new List<string>();
             PinnedDevices = new List<string>();
+            WidgetDevices = new List<string>();
         }
 
         public AppSettings Clone()
@@ -58,6 +60,7 @@ namespace PowerDock.Core.Storage
             clone.DeviceAliases = new Dictionary<string, string>(DeviceAliases, StringComparer.OrdinalIgnoreCase);
             clone.IgnoredDevices = new List<string>(IgnoredDevices);
             clone.PinnedDevices = new List<string>(PinnedDevices);
+            clone.WidgetDevices = new List<string>(WidgetDevices);
             return clone;
         }
     }
