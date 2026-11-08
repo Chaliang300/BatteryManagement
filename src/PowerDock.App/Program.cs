@@ -44,6 +44,10 @@ namespace PowerDock.App
                 {
                     return WindowDiagnostics.RunWindow(true);
                 }
+                else if (cmd == "--diagnose-dock-nav")
+                {
+                    return WindowDiagnostics.RunDockNavigation();
+                }
                 else if (cmd == "--diagnose-first-frame")
                 {
                     return WindowDiagnostics.RunFirstFrame();
@@ -59,6 +63,10 @@ namespace PowerDock.App
                 else if (cmd == "--diagnose-tray")
                 {
                     return TrayDiagnostics.Run();
+                }
+                else if (cmd == "--diagnose-tray-restore")
+                {
+                    return WindowDiagnostics.RunTrayRestore();
                 }
                 else if (cmd == "--diagnose-read")
                 {
@@ -93,11 +101,13 @@ namespace PowerDock.App
                     Console.WriteLine("Usage: PowerDock.exe [options]");
                     Console.WriteLine("Options:");
                     Console.WriteLine("  --self-test       Run built-in hardware, window, and storage self-tests");
-                    Console.WriteLine("  --diagnose-tray   Verify tray icon registration via Shell_NotifyIconGetRect");
+                    Console.WriteLine("  --diagnose-tray     Verify tray icon registration via Shell_NotifyIconGetRect");
+                    Console.WriteLine("  --diagnose-tray-restore  Minimize then restore via the real tray wake-up path");
                     Console.WriteLine("  --diagnose-read [sec]  Sample discovery, link evidence, online state, reading source and failures");
                     Console.WriteLine("  --diagnose-window          Report DWM backdrop HRESULTs, read-backs and staged activation");
                     Console.WriteLine("  --diagnose-window-fallback Force the static fallback branch and report it");
                     Console.WriteLine("  --diagnose-first-frame     Measure Program.Main -> first CompositionTarget.Rendering");
+                    Console.WriteLine("  --diagnose-dock-nav        Exercise Dock hit-testing, UIA Invoke, Enter/Space and scroll retention");
                     Console.WriteLine("  --diagnose-close-tray      Exercise real close behavior with tray available (hide, stay alive)");
                     Console.WriteLine("  --diagnose-close-no-tray   Exercise real close behavior without tray (process exit)");
                     Console.WriteLine("  --diagnose-tray-failure  Inject tray failure and verify close=>process exit (diagnostic)");
