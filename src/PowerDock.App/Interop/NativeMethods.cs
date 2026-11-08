@@ -179,7 +179,135 @@ namespace PowerDock.App.Interop
             }
             return false;
         }
-}
+
+        // --- single-instance constants (PR-S0-03) ---
+        public const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+        public const uint TOKEN_QUERY = 0x0008;
+        public const int TokenUser = 1;
+        public const uint WM_CLOSE = 0x0010;
+        public const uint MB_OK = 0x00000000;
+        public const uint MB_ICONWARNING = 0x00000030;
+
+        // --- single-instance pipe identity (PR-S0-03) ---
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetNamedPipeClientProcessId(IntPtr pipe, out uint clientProcessId);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetNamedPipeServerProcessId(IntPtr pipe, out uint serverProcessId);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern IntPtr OpenProcess(uint desiredAccess, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, uint processId);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool CloseHandle(IntPtr handle);
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool OpenProcessToken(IntPtr processHandle, uint desiredAccess, out IntPtr tokenHandle);
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetTokenInformation(IntPtr tokenHandle, int tokenInformationClass,
+            IntPtr tokenInformation, int tokenInformationLength, out int returnLength);
+
+        [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool ConvertSidToStringSid(IntPtr sid, out IntPtr stringSid);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern IntPtr LocalFree(IntPtr handle);
+
+        /// <summary>
+        /// Resolves a process token SID and returns it as S-1-5-... text. Any failure returns false
+        /// with the concrete Win32 error, so the caller can log a readable reason and reject the
+        /// client. Never fall back to a user-name string comparison.
+        /// </summary>
+        public static bool TryGetProcessUserSid(int processId, out string sid, out int win32Error)
+        {
+            sid = null;
+            win32Error = 0;
+            IntPtr processHandle = IntPtr.Zero;
+            IntPtr tokenHandle = IntPtr.Zero;
+            IntPtr buffer = IntPtr.Zero;
+            IntPtr stringSid = IntPtr.Zero;
+            try
+            {
+                processHandle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, (uint)processId);
+                if (processHandle == IntPtr.Zero)
+                {
+                    win32Error = Marshal.GetLastWin32Error();
+                    return false;
+                }
+
+                if (!OpenProcessToken(processHandle, TOKEN_QUERY, out tokenHandle))
+                {
+                    win32Error = Marshal.GetLastWin32Error();
+                    return false;
+                }
+
+                int length = 0;
+                GetTokenInformation(tokenHandle, TokenUser, IntPtr.Zero, 0, out length);
+                if (length <= 0)
+                {
+                    win32Error = Marshal.GetLastWin32Error();
+                    return false;
+                }
+
+                buffer = Marshal.AllocHGlobal(length);
+                if (!GetTokenInformation(tokenHandle, TokenUser, buffer, length, out length))
+                {
+                    win32Error = Marshal.GetLastWin32Error();
+                    return false;
+                }
+
+                // TOKEN_USER.User is the first field: a PSID.
+                IntPtr userSid = Marshal.ReadIntPtr(buffer);
+                if (userSid == IntPtr.Zero)
+                {
+                    win32Error = 87; // ERROR_INVALID_PARAMETER
+                    return false;
+                }
+
+                if (!ConvertSidToStringSid(userSid, out stringSid))
+                {
+                    win32Error = Marshal.GetLastWin32Error();
+                    return false;
+                }
+
+                sid = Marshal.PtrToStringUni(stringSid);
+                return !string.IsNullOrEmpty(sid);
+            }
+            catch (Exception ex)
+            {
+                win32Error = Marshal.GetHRForException(ex);
+                return false;
+            }
+            finally
+            {
+                if (stringSid != IntPtr.Zero) { try { LocalFree(stringSid); } catch { } }
+                if (buffer != IntPtr.Zero) { try { Marshal.FreeHGlobal(buffer); } catch { } }
+                if (tokenHandle != IntPtr.Zero) { try { CloseHandle(tokenHandle); } catch { } }
+                if (processHandle != IntPtr.Zero) { try { CloseHandle(processHandle); } catch { } }
+            }
+        }
+
+        // --- readable secondary feedback (non-blocking auto-closing dialog) ---
+
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern int MessageBox(IntPtr hWnd, string text, string caption, uint type);
+
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern IntPtr FindWindow(string className, string windowName);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 }
 
+
+}
 

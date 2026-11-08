@@ -270,10 +270,19 @@ namespace PowerDock.App.Windows
             }
             else
             {
-                // Tray unavailable: never hide into an invisible process (AGENTS.md §7.6).
+                // Never hide into an invisible process (AGENTS.md §7.6). Distinguish the two reasons:
+                // the setting asked for exit-on-close, or the tray is genuinely unavailable.
                 e.Cancel = false;
-                AppLogger.Warn("Tray unavailable. MainWindow closing directly shuts down the application. trayAvailable=" +
-                    (TrayService != null && TrayService.IsTrayAvailable) + " pid=" + System.Diagnostics.Process.GetCurrentProcess().Id);
+                bool trayAvailable = TrayService != null && TrayService.IsTrayAvailable;
+                int pid = System.Diagnostics.Process.GetCurrentProcess().Id;
+                if (!MinimizeToTrayOnClose)
+                {
+                    AppLogger.Info("Close behavior: exit on close (reason=setting MinimizeToTrayOnClose=false, trayAvailable=" + trayAvailable + " pid=" + pid + ")");
+                }
+                else
+                {
+                    AppLogger.Warn("Tray unavailable. MainWindow closing directly shuts down the application. trayAvailable=" + trayAvailable + " pid=" + pid);
+                }
                 var app = Application.Current;
                 if (app != null)
                 {
@@ -319,6 +328,7 @@ namespace PowerDock.App.Windows
         }
     }
 }
+
 
 
 
