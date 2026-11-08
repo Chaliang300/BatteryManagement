@@ -78,14 +78,17 @@ namespace PowerDock.App.Diagnostics
                 osMajor = Environment.OSVersion.Version.Major;
             }
 
-            bool isWin10Or11 = osMajor >= 10;
+            int winBuild = 0;
+            int.TryParse(buildNumber, out winBuild);
+            bool isWin11 = osMajor >= 10 && winBuild >= 22000;
             items.Add(new SelfTestItem
             {
                 Id = "SYS-02",
                 Category = "Environment",
-                Description = "Windows 10/11 操作系统版本检测",
-                Passed = isWin10Or11,
-                Detail = string.Format("OS Major: {0}, Build: {1}", osMajor, buildNumber)
+                Description = "Windows 11 操作系统版本检测（Build >= 22000；Win10 不通过）",
+                Passed = isWin11,
+                Detail = string.Format("OS Major: {0}, Build: {1} -> {2}（要求 build>=22000）",
+                    osMajor, buildNumber, isWin11 ? "Windows 11" : "Windows 10/未知（不满足）")
             });
 
             try
@@ -762,7 +765,7 @@ namespace PowerDock.App.Diagnostics
                 });
             }
 
-            // PERF-01: 基础性能指标验证 (内存占用 <150MB, 进程健康)
+            // PERF-01: 进程运行时长与内存（明确不是首帧；首帧由 PERF-02 / --diagnose-first-frame 测量）
             try
             {
                 Process currentProc = Process.GetCurrentProcess();
@@ -776,9 +779,9 @@ namespace PowerDock.App.Diagnostics
                 {
                     Id = "PERF-01",
                     Category = "Performance",
-                    Description = "基础性能指标验证 (内存占用 <150MB, 进程健康)",
+                    Description = "进程运行时长与内存（uptime，非首帧）",
                     Passed = perfPassed,
-                    Detail = string.Format("当前工作集内存: {0} MB (指标 <150MB), 进程运行时间: {1:N0} ms", workingSetMb, uptime.TotalMilliseconds)
+                    Detail = string.Format("当前工作集内存: {0} MB (指标 <150MB), 进程运行时长(uptime): {1:N0} ms；首帧见 PERF-02/--diagnose-first-frame", workingSetMb, uptime.TotalMilliseconds)
                 });
             }
             catch (Exception ex)
@@ -787,7 +790,36 @@ namespace PowerDock.App.Diagnostics
                 {
                     Id = "PERF-01",
                     Category = "Performance",
-                    Description = "基础性能指标验证",
+                    Description = "进程运行时长与内存（uptime，非首帧）",
+                    Passed = false,
+                    Detail = ex.Message
+                });
+            }
+
+            // PERF-02: 首帧埋点通路（Program.Main 首行 Arm -> MainWindow 订阅 Rendering -> 首次回调）。
+            // 自检不显示窗口，因此只验证埋点通路已就位；真实首帧数值用 --diagnose-first-frame。
+            try
+            {
+                bool armed = FirstFrameTimer.Armed;
+                bool handler = FirstFrameTimer.HandlerRegistered;
+                bool measured = FirstFrameTimer.Measured;
+                items.Add(new SelfTestItem
+                {
+                    Id = "PERF-02",
+                    Category = "Performance",
+                    Description = "首帧埋点通路（Main->CompositionTarget.Rendering；数值由 --diagnose-first-frame 测量）",
+                    Passed = armed && handler,
+                    Detail = string.Format("armed={0}, handlerRegistered={1}, measuredInSelfTest={2}（自检无窗口，不产生首帧数值）",
+                        armed, handler, measured)
+                });
+            }
+            catch (Exception ex)
+            {
+                items.Add(new SelfTestItem
+                {
+                    Id = "PERF-02",
+                    Category = "Performance",
+                    Description = "首帧埋点通路",
                     Passed = false,
                     Detail = ex.Message
                 });
@@ -848,3 +880,4 @@ namespace PowerDock.App.Diagnostics
         }
     }
 }
+

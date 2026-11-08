@@ -7,6 +7,11 @@ using PowerDock.Core.Diagnostics;
 
 namespace PowerDock.App.Interop
 {
+    /// <summary>
+    /// Thin, checked DWM wrapper for the main-window backdrop. Every Set call returns the HRESULT
+    /// and every applied attribute can be read back, so "material requested" is never confused with
+    /// "material presented".
+    /// </summary>
     public static class DwmHelper
     {
         // DWM Window Attributes
@@ -48,7 +53,13 @@ namespace PowerDock.App.Interop
         public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 
         [DllImport("dwmapi.dll", PreserveSig = true)]
+        public static extern int DwmGetWindowAttribute(IntPtr hwnd, int attr, out int attrValue, int attrSize);
+
+        [DllImport("dwmapi.dll", PreserveSig = true)]
         public static extern int DwmExtendFrameIntoClientArea(IntPtr hWnd, ref MARGINS pMarInset);
+
+        [DllImport("dwmapi.dll", PreserveSig = true)]
+        public static extern int DwmIsCompositionEnabled([MarshalAs(UnmanagedType.Bool)] out bool compositionEnabled);
 
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -59,6 +70,12 @@ namespace PowerDock.App.Interop
         public const uint SWP_NOZORDER = 0x0004;
         public const uint SWP_FRAMECHANGED = 0x0020;
 
+        public static string HResultText(int hr)
+        {
+            return "0x" + hr.ToString("X8");
+        }
+
+        /// <summary>Windows 11 22621 is the floor for DWMWA_SYSTEMBACKDROP_TYPE.</summary>
         public static bool SupportsAcrylicBackdrop()
         {
             try
@@ -79,61 +96,103 @@ namespace PowerDock.App.Interop
             return Environment.OSVersion.Version.Major >= 10 && Environment.OSVersion.Version.Build >= 22621;
         }
 
-        public static bool ApplyMainWindowStyle(Window window, bool isDark)
+        public static bool IsCompositionEnabled()
         {
-            if (window == null) return false;
-
-            var helper = new WindowInteropHelper(window);
-            IntPtr hwnd = helper.Handle;
-            if (hwnd == IntPtr.Zero) return false;
-
-            bool success = true;
-
-            // 1. 设置圆角为 8 DIP (DWMWCP_ROUND)
             try
             {
-                int cornerPref = DWMWCP_ROUND;
-                int hr = DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerPref, sizeof(int));
-                if (hr != 0) success = false;
+                bool enabled;
+                if (DwmIsCompositionEnabled(out enabled) == 0)
+                {
+                    return enabled;
+                }
             }
             catch (Exception ex)
             {
-                AppLogger.Warn("DwmSetWindowAttribute DWMWA_WINDOW_CORNER_PREFERENCE failed: " + ex.Message);
-                success = false;
+                AppLogger.Warn("DwmIsCompositionEnabled failed: " + ex.Message);
             }
+            return false;
+        }
 
-            // 2. 设置深浅主题暗色模式标志
+        /// <summary>HKCU\...\Themes\Personalize\EnableTransparency = 0 disables system transparency.</summary>
+        public static bool IsSystemTransparencyEnabled()
+        {
             try
             {
-                int darkMode = isDark ? 1 : 0;
-                DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
+                object val = Registry.GetValue(
+                    @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+                    "EnableTransparency", null);
+                if (val != null)
+                {
+                    return Convert.ToInt32(val) != 0;
+                }
             }
             catch
             {
             }
+            return true;
+        }
 
-            // 3. 设置 DWM Acrylic 材质 (Build 22621+) 或静态降级
-            if (SupportsAcrylicBackdrop())
+        public static bool IsHighContrast
+        {
+            get
             {
-                try
-                {
-                    int backdropType = DWMSBT_TRANSIENTWINDOW; // Acrylic
-                    int hr = DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, ref backdropType, sizeof(int));
-
-                    // 扩展客户区帧 (AGENTS.md §7.3)
-                    MARGINS margins = new MARGINS(-1, -1, -1, -1);
-                    DwmExtendFrameIntoClientArea(hwnd, ref margins);
-
-                    // 触发 SWP_FRAMECHANGED
-                    SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
-                }
-                catch (Exception ex)
-                {
-                    AppLogger.Warn("Apply Acrylic backdrop failed: " + ex.Message);
-                }
+                try { return SystemParameters.HighContrast; }
+                catch { return false; }
             }
+        }
 
-            return success;
+        public static int SetCornerPreference(IntPtr hwnd, int preference, out int readBack)
+        {
+            readBack = -1;
+            int value = preference;
+            int hr = DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref value, sizeof(int));
+            if (hr == 0)
+            {
+                DwmGetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, out readBack, sizeof(int));
+            }
+            return hr;
+        }
+
+        public static int SetDarkMode(IntPtr hwnd, bool isDark, out int readBack)
+        {
+            readBack = -1;
+            int value = isDark ? 1 : 0;
+            int hr = DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref value, sizeof(int));
+            if (hr == 0)
+            {
+                DwmGetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, out readBack, sizeof(int));
+            }
+            return hr;
+        }
+
+        public static int SetBackdropType(IntPtr hwnd, int type, out int readBack)
+        {
+            readBack = -1;
+            int value = type;
+            int hr = DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, ref value, sizeof(int));
+            if (hr == 0)
+            {
+                DwmGetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, out readBack, sizeof(int));
+            }
+            return hr;
+        }
+
+        public static int GetBackdropType(IntPtr hwnd, out int readBack)
+        {
+            return DwmGetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, out readBack, sizeof(int));
+        }
+
+        /// <summary>Extends the DWM frame into the whole client area; must return 0 to be effective.</summary>
+        public static int ExtendFrame(IntPtr hwnd)
+        {
+            MARGINS margins = new MARGINS(-1, -1, -1, -1);
+            return DwmExtendFrameIntoClientArea(hwnd, ref margins);
+        }
+
+        public static bool ForceFrameChanged(IntPtr hwnd)
+        {
+            return SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
         }
     }
 }

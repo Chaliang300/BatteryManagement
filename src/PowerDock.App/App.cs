@@ -3,6 +3,7 @@ using System.Windows;
 using PowerDock.App.Shell;
 using PowerDock.App.Windows;
 using PowerDock.Core.Diagnostics;
+using PowerDock.Core.Storage;
 
 namespace PowerDock.App
 {
@@ -39,6 +40,24 @@ namespace PowerDock.App
                 // 2. 初始化主窗口 (880x600, 圆角 8, DWM Acrylic)
                 _mainWindow = new MainWindow();
                 _mainWindow.TrayService = _trayIconService;
+
+                // Bind the close behaviour from settings (default true). Previously the property was
+                // only hard-coded in the MainWindow constructor and AppSettings was never applied.
+                try
+                {
+                    SettingsStore shellSettings = new SettingsStore();
+                    shellSettings.Load();
+                    AppSettings current = shellSettings.Current ?? new AppSettings();
+                    _mainWindow.MinimizeToTrayOnClose = current.MinimizeToTrayOnClose;
+                    AppLogger.Info("Shell settings: MinimizeToTrayOnClose=" + _mainWindow.MinimizeToTrayOnClose +
+                                   " source=" + shellSettings.FilePath);
+                }
+                catch (Exception settingsEx)
+                {
+                    _mainWindow.MinimizeToTrayOnClose = true;
+                    AppLogger.Warn("Failed to load shell settings; MinimizeToTrayOnClose defaults to true: " + settingsEx.Message);
+                }
+
                 MainWindow = _mainWindow;
 
                 // 托盘点击联动唤醒主窗口
@@ -118,4 +137,5 @@ namespace PowerDock.App
         }
     }
 }
+
 

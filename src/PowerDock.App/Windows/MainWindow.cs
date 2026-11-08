@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using PowerDock.App.Diagnostics;
 using PowerDock.App.Interop;
 using PowerDock.App.Shell;
 using PowerDock.Core.Diagnostics;
@@ -18,6 +19,7 @@ namespace PowerDock.App.Windows
         public const double TitleBarHeightDip = 44.0;
 
         private Border _rootSurface;
+        private WindowBackdropController _backdrop;
         private Grid _mainGrid;
         private Border _titleBar;
         private ContentControl _contentHost;
@@ -46,7 +48,16 @@ namespace PowerDock.App.Windows
 
             BuildVisualTree();
 
-            Loaded += OnWindowLoaded;
+            // Backdrop lifecycle: transparent CompositionTarget, checked frame extension, staged
+            // Acrylic activation, redo on every show/theme/composition change (PR-S0-05).
+            _backdrop = new WindowBackdropController();
+            _backdrop.Attach(this, _rootSurface);
+
+            // First-frame instrumentation: Program.Main arms the stopwatch; this is the first
+            // CompositionTarget.Rendering callback on the UI thread.
+            CompositionTarget.Rendering += OnFirstCompositionRendering;
+            FirstFrameTimer.MarkHandlerRegistered();
+
             Closing += OnWindowClosing;
         }
 
@@ -228,30 +239,55 @@ namespace PowerDock.App.Windows
             }
         }
 
-        private void OnWindowLoaded(object sender, RoutedEventArgs e)
+        public WindowBackdropController Backdrop
         {
-            // 应用 DWM 8px 圆角与 Acrylic 材质 (AGENTS.md §7.1, §7.3, §7.4)
-            DwmHelper.ApplyMainWindowStyle(this, isDark: true);
+            get { return _backdrop; }
+        }
+
+        private void OnFirstCompositionRendering(object sender, EventArgs e)
+        {
+            CompositionTarget.Rendering -= OnFirstCompositionRendering;
+            FirstFrameTimer.NotifyFirstFrame();
         }
 
         private void OnWindowClosing(object sender, CancelEventArgs e)
+        {
+            ApplyCloseBehavior(e);
+        }
+
+        /// <summary>
+        /// The single close-behavior implementation (AGENTS.md §7.6):
+        /// tray available -> cancel close and hide to tray; tray unavailable -> exit the process.
+        /// Used by Closing and by --diagnose-close* so diagnostics exercise the real path.
+        /// </summary>
+        internal void ApplyCloseBehavior(CancelEventArgs e)
         {
             if (MinimizeToTrayOnClose && TrayService != null && TrayService.IsTrayAvailable)
             {
                 e.Cancel = true;
                 Hide();
-                AppLogger.Info("MainWindow hidden to tray.");
+                AppLogger.Info("MainWindow hidden to tray. trayAvailable=true pid=" + System.Diagnostics.Process.GetCurrentProcess().Id);
             }
             else
             {
                 // Tray unavailable: never hide into an invisible process (AGENTS.md §7.6).
-                AppLogger.Warn("Tray unavailable. MainWindow closing directly shuts down the application.");
+                e.Cancel = false;
+                AppLogger.Warn("Tray unavailable. MainWindow closing directly shuts down the application. trayAvailable=" +
+                    (TrayService != null && TrayService.IsTrayAvailable) + " pid=" + System.Diagnostics.Process.GetCurrentProcess().Id);
                 var app = Application.Current;
                 if (app != null)
                 {
                     app.Shutdown();
                 }
             }
+        }
+
+        /// <summary>Diagnostic-only entry that invokes the real close behavior on the real window.</summary>
+        internal CancelEventArgs SimulateCloseForDiagnostics()
+        {
+            CancelEventArgs args = new CancelEventArgs();
+            ApplyCloseBehavior(args);
+            return args;
         }
 
         public void ActivateAndRestore()
@@ -283,4 +319,6 @@ namespace PowerDock.App.Windows
         }
     }
 }
+
+
 
