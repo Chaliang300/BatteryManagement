@@ -21,6 +21,9 @@ namespace PowerDock.Core.Providers.Hid
         public bool IsUsbBus { get; set; }
         public string FriendlyName { get; set; }
 
+        /// <summary>PnP 设备描述（SPDRP_DEVICEDESC），友好名缺失时的可读回退。</summary>
+        public string DeviceDescription { get; set; }
+
         public HidInterfaceInfo()
         {
             InterfacePath = string.Empty;
@@ -30,6 +33,7 @@ namespace PowerDock.Core.Providers.Hid
             VendorId = string.Empty;
             ProductId = string.Empty;
             FriendlyName = string.Empty;
+            DeviceDescription = string.Empty;
         }
     }
 
@@ -115,6 +119,10 @@ namespace PowerDock.Core.Providers.Hid
                 info.ContainerId = ReadStringProperty(deviceInfoSet, ref devInfo, HidInterop.DEVPKEY_Device_ContainerId);
                 info.ParentInstanceId = ReadStringProperty(deviceInfoSet, ref devInfo, HidInterop.DEVPKEY_Device_Parent);
                 info.FriendlyName = ReadRegistryString(deviceInfoSet, ref devInfo, HidInterop.SPDRP_FRIENDLYNAME);
+                if (string.IsNullOrEmpty(info.FriendlyName))
+                {
+                    info.DeviceDescription = ReadRegistryString(deviceInfoSet, ref devInfo, HidInterop.SPDRP_DEVICEDESC);
+                }
 
                 FillVidPid(info);
                 info.IsUsbBus = info.InstanceId.StartsWith("USB\\", StringComparison.OrdinalIgnoreCase) ||
@@ -138,15 +146,26 @@ namespace PowerDock.Core.Providers.Hid
             }
             if (requiredSize < 4) return string.Empty;
 
-            // DEVPROP_TYPE_GUID = 13，容器 ID 是 GUID；其余按 UTF-16 字符串处理。
+            // DEVPROP_TYPE_GUID = 13：容器 ID 是 GUID，必须按 16 字节解析而不是当字符串读。
             if (propertyType == 13 && requiredSize >= 16)
             {
                 var bytes = new byte[16];
                 Array.Copy(buffer, bytes, 16);
-                return new Guid(bytes).ToString("D");
+                string guid = new Guid(bytes).ToString("D");
+                // 「无容器」哨兵：Windows 用它表示该设备没有真实容器，不能作为合并依据。
+                if (!DeviceIdentity.IsUsableContainer(guid))
+                {
+                    return string.Empty;
+                }
+                return guid;
             }
-            if (requiredSize < 4) return string.Empty;
-            return System.Text.Encoding.Unicode.GetString(buffer, 0, (requiredSize / 2) * 2).Trim('\0');
+
+            string text = System.Text.Encoding.Unicode.GetString(buffer, 0, (requiredSize / 2) * 2).Trim('\0');
+            if (key.pid == HidInterop.DEVPKEY_Device_ContainerId.pid && !DeviceIdentity.IsUsableContainer(text))
+            {
+                return string.Empty;
+            }
+            return text;
         }
 
         private static string ReadRegistryString(IntPtr deviceInfoSet, ref HidInterop.SP_DEVINFO_DATA devInfo, int property)

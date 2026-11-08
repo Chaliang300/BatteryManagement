@@ -277,19 +277,25 @@ namespace PowerDock.Core.Providers.Hid
         }
 
         /// <summary>
-        /// 归并键：容器 ID 优先；没有容器 ID 时按「父节点 + VID/PID」聚合，并如实标记身份未确认。
+        /// 归并键：容器 ID 优先；没有可用容器 ID 时按「父节点 + VID/PID」聚合；两者都没有时退回实例路径。
         /// 名称、型号、仅有 VID/PID 相同都不构成合并依据。
         /// </summary>
         internal static string GroupKey(HidInterfaceInfo info)
         {
-            if (!string.IsNullOrEmpty(info.ContainerId))
+            if (DeviceIdentity.IsUsableContainer(info.ContainerId))
             {
                 return "container:" + info.ContainerId.Trim().Trim('{', '}').ToLowerInvariant();
             }
-            if (!string.IsNullOrEmpty(info.ParentInstanceId))
+
+            bool hasVidPid = !string.IsNullOrEmpty(info.VendorId) && !string.IsNullOrEmpty(info.ProductId);
+            if (!string.IsNullOrEmpty(info.ParentInstanceId) && hasVidPid)
             {
+                // 同一接收器/复合设备的多个接口共享父节点与 VID/PID。
                 return "parent:" + info.ParentInstanceId + "|" + info.VendorId + ":" + info.ProductId;
             }
+
+            // 没有容器也没有 VID/PID（例如 ROOT\HIDCLASS 下的虚拟输入设备）：
+            // 父节点相同的设备可能彼此无关，只能用实例路径区分，且必须标身份未确认。
             return "instance:" + info.InstanceId;
         }
 
@@ -438,9 +444,15 @@ namespace PowerDock.Core.Providers.Hid
 
         private string DisplayName()
         {
-            // 名称只用于展示，不参与归并。
+            // 名称只用于展示，不参与归并。禁止回退到原始 PnP 实例串：它对用户没有意义，
+            // 且会把蓝牙地址一类的硬件标识直接显示到界面上。
             if (!string.IsNullOrEmpty(_primary.FriendlyName)) return _primary.FriendlyName;
-            if (!string.IsNullOrEmpty(_primary.InstanceId)) return _primary.InstanceId;
+            if (!string.IsNullOrEmpty(_primary.DeviceDescription)) return _primary.DeviceDescription;
+
+            if (!string.IsNullOrEmpty(_primary.VendorId) && !string.IsNullOrEmpty(_primary.ProductId))
+            {
+                return "HID 设备 (VID " + _primary.VendorId + " PID " + _primary.ProductId + ")";
+            }
             return "HID 设备";
         }
 
