@@ -64,6 +64,10 @@ namespace PowerDock.App
                 {
                     return TrayDiagnostics.Run();
                 }
+                else if (cmd == "--diagnose-tray-restore")
+                {
+                    return WindowDiagnostics.RunTrayRestore();
+                }
                 else if (cmd == "--diagnose")
                 {
                     int seconds = 5;
@@ -85,7 +89,8 @@ namespace PowerDock.App
                     Console.WriteLine("Usage: PowerDock.exe [options]");
                     Console.WriteLine("Options:");
                     Console.WriteLine("  --self-test       Run built-in hardware, window, and storage self-tests");
-                    Console.WriteLine("  --diagnose-tray   Verify tray icon registration via Shell_NotifyIconGetRect");
+                    Console.WriteLine("  --diagnose-tray     Verify tray icon registration via Shell_NotifyIconGetRect");
+                    Console.WriteLine("  --diagnose-tray-restore  Minimize then restore via the real tray wake-up path");
                     Console.WriteLine("  --diagnose-window          Report DWM backdrop HRESULTs, read-backs and staged activation");
                     Console.WriteLine("  --diagnose-window-fallback Force the static fallback branch and report it");
                     Console.WriteLine("  --diagnose-first-frame     Measure Program.Main -> first CompositionTarget.Rendering");

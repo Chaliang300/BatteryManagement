@@ -187,6 +187,131 @@ namespace PowerDock.App.Diagnostics
             }
         }
 
+        /// <summary>
+        /// --diagnose-tray-restore：验证「最小化 → 托盘恢复」的真实路径。
+        /// 走 <see cref="TrayIconService.DefaultWakeupMainWindow"/>（托盘左键与二启激活都会落到这里），
+        /// 不自己拼一套"恢复"逻辑，否则验的是诊断而不是产品。
+        /// 判据：最小化后 IsVisible 仍为真但窗口不可见，恢复后 WindowState 回到 Normal、
+        /// 主窗口仍是同一实例且页面状态未被重置（CurrentPage 与内容实例不变）。
+        /// </summary>
+        public static int RunTrayRestore()
+        {
+            bool pass = false;
+            string error = null;
+            MainPage pageBefore = MainPage.Overview;
+            bool sameContentInstance = false;
+            bool minimizedObserved = false;
+            bool minimizedOffScreen = false;
+            bool restoredNormal = false;
+            bool sameWindowInstance = false;
+            int exitCode = 1;
+
+            var app = new Application();
+            app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            TrayIconService tray = null;
+            MainWindow window = null;
+
+            app.Startup += delegate
+            {
+                try
+                {
+                    tray = new TrayIconService();
+                    bool trayInit = tray.Initialize();
+                    window = new MainWindow();
+                    window.TrayService = tray;
+                    app.MainWindow = window;
+                    window.Show();
+                    window.NavigateTo(MainPage.Devices);
+                    pageBefore = window.CurrentPage;
+
+                    var timer = new DispatcherTimer(DispatcherPriority.ContextIdle, window.Dispatcher);
+                    timer.Interval = TimeSpan.FromMilliseconds(900);
+                    timer.Tick += delegate
+                    {
+                        timer.Stop();
+                        try
+                        {
+                            object contentBefore = window.ContentHost.Content;
+                            window.WindowState = WindowState.Minimized;
+                            window.UpdateLayout();
+                            minimizedObserved = window.WindowState == WindowState.Minimized;
+                            IntPtr minimizedHwnd = new WindowInteropHelper(window).Handle;
+                            minimizedOffScreen = minimizedHwnd != IntPtr.Zero && NativeMethods.IsIconic(minimizedHwnd);
+
+                            // 真实恢复路径：托盘左键 / 二启激活都调用这一条。
+                            TrayIconService.DefaultWakeupMainWindow();
+                            window.UpdateLayout();
+
+                            Window target = app.MainWindow;
+                            sameWindowInstance = target is MainWindow && ReferenceEquals(target, window);
+                            restoredNormal = window.WindowState == WindowState.Normal && window.IsVisible;
+                            sameContentInstance = ReferenceEquals(contentBefore, window.ContentHost.Content) &&
+                                                  window.CurrentPage == pageBefore;
+                            pass = trayInit && tray.IsTrayAvailable && minimizedObserved && minimizedOffScreen &&
+                                   sameWindowInstance && restoredNormal && sameContentInstance;
+                        }
+                        catch (Exception ex)
+                        {
+                            error = ex.GetType().Name + ": " + ex.Message;
+                            pass = false;
+                        }
+
+                        WriteTrayRestoreReport(pass, error, tray != null && tray.IsTrayAvailable,
+                            minimizedObserved, minimizedOffScreen, sameWindowInstance, restoredNormal,
+                            sameContentInstance, pageBefore);
+                        if (window != null && window.IsVisible) { try { window.Close(); } catch { } }
+                        if (tray != null) { try { tray.Dispose(); } catch { } }
+                        try { app.Shutdown(); } catch { }
+                        exitCode = pass ? 0 : 1;
+                    };
+                    timer.Start();
+                }
+                catch (Exception ex)
+                {
+                    error = ex.GetType().Name + ": " + ex.Message;
+                    WriteTrayRestoreReport(false, error, false, false, false, false, false, false, pageBefore);
+                    try { app.Shutdown(); } catch { }
+                    exitCode = 1;
+                }
+            };
+
+            app.Run();
+            Console.WriteLine("[PowerDock Tray-Restore] pass=" + pass +
+                              " minimized=" + minimizedObserved + " restoredNormal=" + restoredNormal);
+            return exitCode;
+        }
+
+        private static void WriteTrayRestoreReport(bool pass, string error, bool trayAvailable,
+            bool minimizedObserved, bool minimizedOffScreen, bool sameWindowInstance, bool restoredNormal,
+            bool sameContentInstance, MainPage pageBefore)
+        {
+            try
+            {
+                string dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data");
+                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+                var sb = new StringBuilder();
+                sb.AppendLine("{");
+                sb.AppendLine("  \"timestampUtc\": \"" + DateTime.UtcNow.ToString("o") + "\",");
+                sb.AppendLine("  \"mode\": \"tray-restore\",");
+                sb.AppendLine("  \"pass\": " + (pass ? "true" : "false") + ",");
+                sb.AppendLine("  \"trayAvailable\": " + (trayAvailable ? "true" : "false") + ",");
+                sb.AppendLine("  \"minimizedObserved\": " + (minimizedObserved ? "true" : "false") + ",");
+                sb.AppendLine("  \"minimizedOffScreenOrIconic\": " + (minimizedOffScreen ? "true" : "false") + ",");
+                sb.AppendLine("  \"sameWindowInstance\": " + (sameWindowInstance ? "true" : "false") + ",");
+                sb.AppendLine("  \"restoredNormal\": " + (restoredNormal ? "true" : "false") + ",");
+                sb.AppendLine("  \"statePreserved\": " + (sameContentInstance ? "true" : "false") + ",");
+                sb.AppendLine("  \"currentPageBefore\": \"" + pageBefore + "\",");
+                sb.AppendLine("  \"error\": \"" + Escape(error) + "\"");
+                sb.AppendLine("}");
+                File.WriteAllText(Path.Combine(dir, "tray-restore-diagnose.json"), sb.ToString(), Encoding.UTF8);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warn("WindowDiagnostics: failed to write tray-restore report: " + ex.Message);
+            }
+        }
+
         public static int RunCloseBehavior(bool trayAvailable)
         {
             bool pass = false;
