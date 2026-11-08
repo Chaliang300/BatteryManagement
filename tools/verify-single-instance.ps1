@@ -999,14 +999,22 @@ try {
         Add-Check -Case $case -Name 'primary window appears' -Pass ($primary7.WindowMs -ge 0) -Detail ('windowMs=' + $primary7.WindowMs)
         $silent = $null
         $silentOk = $false
-        try {
-            $silent = New-Object System.IO.Pipes.NamedPipeClientStream('.', $pipeName, [System.IO.Pipes.PipeDirection]::InOut)
-            $silent.Connect(2000)
-            $silentOk = $true
-        } catch {
-            $silentOk = $false
+        $silentError = $null
+        Start-Sleep -Milliseconds 300
+        $recentReady = @(Get-AppLogLines | Select-String 'Primary instance ready \(pipe listening\):\s*(.+)$' | Select-Object -Last 1)
+        if ($recentReady.Count -gt 0) { $pipeName = $recentReady[0].Matches[0].Groups[1].Value.Trim() }
+        for ($attempt = 0; $attempt -lt 3 -and -not $silentOk; $attempt++) {
+            try {
+                if ($silent) { try { $silent.Dispose() } catch { } }
+                $silent = New-Object System.IO.Pipes.NamedPipeClientStream('.', $pipeName, [System.IO.Pipes.PipeDirection]::InOut)
+                $silent.Connect(1500)
+                $silentOk = $true
+            } catch {
+                $silentError = $_.Exception.GetType().Name + ': ' + $_.Exception.Message
+                Start-Sleep -Milliseconds 300
+            }
         }
-        Add-Check -Case $case -Name 'silent client connected and holds the pipe without sending a request' -Pass $silentOk -Detail ('connected=' + $silentOk)
+        Add-Check -Case $case -Name 'silent client connected and holds the pipe without sending a request' -Pass $silentOk -Detail ('connected=' + $silentOk + ' pipe=' + $pipeName + ' error=' + $silentError)
         if ($silentOk) {
             Start-Sleep -Milliseconds 300
             $sw7 = [System.Diagnostics.Stopwatch]::StartNew()
@@ -1085,6 +1093,7 @@ finally {
         catch { }
     }
 }
+
 
 
 
